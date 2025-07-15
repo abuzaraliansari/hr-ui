@@ -10,9 +10,10 @@ function Footer() {
           Integration <span className="footer-title-made">Made</span> <span className="footer-title-easy">Easy</span>
         </div>
         <div className="footer-contact">
-          <i className="fas fa-phone footer-icon"></i><span className="footer-phone">+91-7972143020</span>
-           <i className="fas fa-envelope footer-icon"></i>
-          <a href="mailto:contactus@intmavens.com" className="footer-email">contactus@intmavens.com</a>
+          <i className="fas fa-phone footer-icon"></i>
+          <a href="tel:+917972143020" className="footer-phone" style={{ color: '#fff', textDecoration: 'none' }}>+91-7972143020</a>
+          <i className="fas fa-envelope footer-icon"></i>
+          <a href="mailto:contactus@intmavens.com" className="footer-email" style={{ color: '#fff', textDecoration: 'none' }}>contactus@intmavens.com</a>
         </div>
       </div>
       {/* Divider */}
@@ -56,4 +57,5 @@ function Footer() {
     </footer>
   );
 }
+
 export default Footer;

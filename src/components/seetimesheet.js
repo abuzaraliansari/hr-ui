@@ -14,7 +14,7 @@ const monthNames = [
 ];
 
 const weekDayNames = [
-  'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'
+  'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'
 ];
 
 const categoryOptions = [
@@ -72,6 +72,22 @@ const MultiSelectDropdown = ({ label, options, selected, onChange, allLabel = 'A
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [open]);
+
+  // Auto-select all matching options and clear previous selections when search changes
+  useEffect(() => {
+    if (search.length > 0) {
+      const filtered = options.filter(opt => {
+        const labelText = (opt.label || opt).toLowerCase();
+        return labelText.includes(search.toLowerCase());
+      });
+      const filteredValues = filtered.map(opt => String(opt.value || opt));
+      // Only update if selection is different
+      if (JSON.stringify(selected) !== JSON.stringify(filteredValues)) {
+        onChange(filteredValues);
+      }
+    }
+  // Only run when search changes
+  }, [search]);
 
   const handleOptionChange = (value) => {
     if (value === 'ALL') {
@@ -134,7 +150,7 @@ const SeeTimesheetTable = () => {
   const [employeeOptions, setEmployeeOptions] = useState([]);
   const [projectOptions, setProjectOptions] = useState([]);
   const employeeId = user?.EmployeeID;
-  const roleId = user?.roles && user.roles.length > 0 ? user.roles[0].roleId : null;
+  const roleid = user?.roles && user.roles.length > 0 ? user.roles[0].roleid : null;
   const [entries, setEntries] = useState([]);
   const [filters, setFilters] = useState({
     ProjectsName: [],
@@ -152,15 +168,14 @@ const SeeTimesheetTable = () => {
   const [selectedWeekDay, setSelectedWeekDay] = useState(null);
   const [selectedMonthWeek, setSelectedMonthWeek] = useState(null);
   const [weekOffset, setWeekOffset] = useState(0);
-  const [selectedRows, setSelectedRows] = useState([]);
-  const [rowEdits, setRowEdits] = useState({});
+
 
   // Fetch entries based on roleId
   const fetchEntries = useCallback(async () => {
     try {
       let response;
-      // Use roleid from user.roles[0].roleid
-      const userRoleId = user?.roles && user.roles.length > 0 ? user.roles[0].roleid : null;
+      // Use roleId from user.roles[0].roleId
+      const userRoleId = user?.roles && user.roles.length > 0 ? user.roles[0].roleId : null;
       if (userRoleId === 1 && employeeId) {
         const payloadEmployeeId = Number(employeeId);
         response = await getAllTimesheetEntries(payloadEmployeeId);
@@ -305,152 +320,123 @@ const SeeTimesheetTable = () => {
   const minWeekOffset = getWeekDiff(firstMonday, currentMonday);
   const maxWeekOffset = getWeekDiff(lastMonday, currentMonday);
 
-  const handleRowEditChange = (entryId, field, value, projectId) => {
-    let max = projectId === '4' ? 8 : 3;
-    if (field === 'TotalHours' && Number(value) > max) value = max;
-    setRowEdits(prev => ({
-      ...prev,
-      [entryId]: {
-        ...prev[entryId],
-        [field]: value
-      }
-    }));
-  };
-
-  const handleRowSelect = (entryId) => {
-    setSelectedRows(prev =>
-      prev.includes(entryId)
-        ? prev.filter(id => id !== entryId)
-        : [...prev, entryId]
-    );
-  };
-
-  const handleSelectAll = () => {
-    if (selectedRows.length === filteredEntries.length) {
-      setSelectedRows([]);
-    } else {
-      setSelectedRows(filteredEntries.map(e => e.EntryID));
-    }
-  };
 
   // Download Excel handler
   const handleDownloadExcel = async () => {
     if (filteredEntries.length === 0) return;
 
-    // Prepare data for Excel: show labels for EmployeeName and Project, add S.No
-    const data = filteredEntries.map((entry, idx) => ({
-      SNo: idx + 1,
-      Date: formatDateTime(entry.Date),
-      EmployeeName: employeeOptions.find(opt => String(opt.value) === String(entry.EmployeeID))?.label || entry.EmployeeID,
-      Cateogary: entry.Cateogary,
-      Project: projectOptions.find(opt => String(opt.value) === String(entry.ProjectID))?.label || entry.ProjectID,
-      TaskID: entry.TaskID,
-      Task: entry.Task,
-      Hours: entry.TotalHours,
-      Status: entry.Status,
-      Comment: entry.Comment,
-      ManagerComment: entry.ManagerComment
-    }));
-
-    // Calculate total hours
-    const totalHours = data.reduce((sum, row) => sum + (parseFloat(row.Hours) || 0), 0);
-
-    // Add a total row at the end: label in Task, value in Hours
-    data.push({
-      SNo: '',
-      Date: '',
-      EmployeeName: '',
-      Cateogary: '',
-      Project: '',
-      TaskID: '',
-      Task: 'Total Hours =',
-      Hours: totalHours,
-      Status: '',
-      Comment: '',
-      ManagerComment: ''
+    // Group entries by EmployeeID
+    const entriesByEmployee = {};
+    filteredEntries.forEach(entry => {
+      const empId = String(entry.EmployeeID);
+      if (!entriesByEmployee[empId]) entriesByEmployee[empId] = [];
+      entriesByEmployee[empId].push(entry);
     });
 
-    // Advanced Excel export using exceljs
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('TimesheetData');
 
-    // Define columns (add S.No)
-    worksheet.columns = [
-      { header: 'S.No', key: 'SNo', width: 8 },
-      { header: 'Date', key: 'Date', width: 12 },
-      { header: 'Employee Name', key: 'EmployeeName', width: 20 },
-      { header: 'Category', key: 'Cateogary', width: 14 },
-      { header: 'Project', key: 'Project', width: 18 },
-      { header: 'TaskID', key: 'TaskID', width: 10 },
-      { header: 'Task', key: 'Task', width: 30 },
-      { header: 'Hours', key: 'Hours', width: 10 },
-      { header: 'Status', key: 'Status', width: 12 },
-      { header: 'Comment', key: 'Comment', width: 20 },
-      { header: 'ManagerComment', key: 'ManagerComment', width: 20 }
-    ];
+    // For each employee, create a worksheet
+    Object.entries(entriesByEmployee).forEach(([empId, entries]) => {
+      const empLabel = employeeOptions.find(opt => String(opt.value) === empId)?.label || empId;
+      // Excel worksheet names max 31 chars, remove special chars
+      const safeLabel = empLabel.replace(/[^a-zA-Z0-9 _-]/g, '').substring(0, 31) || `Employee_${empId}`;
+      const worksheet = workbook.addWorksheet(safeLabel);
 
-    // Add rows
-    data.forEach(row => worksheet.addRow(row));
-
-    // Header styling
-    worksheet.getRow(1).eachCell(cell => {
-      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-      cell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FF0070C0' }
-      };
-      cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      cell.border = {
-        top: { style: 'thin' },
-        left: { style: 'thin' },
-        bottom: { style: 'thin' },
-        right: { style: 'thin' }
-      };
-    });
-
-    // Banded rows styling
-    worksheet.eachRow((row, rowNumber) => {
-      if (rowNumber === 1) return; // skip header
-      row.eachCell(cell => {
-        cell.alignment = { vertical: 'middle', horizontal: 'left' };
+      // Prepare data for Excel: show labels for EmployeeName and Project, add S.No
+      const data = entries.map((entry, idx) => ({
+        SNo: idx + 1,
+        Date: formatDateTime(entry.Date),
+        EmployeeName: empLabel,
+        Cateogary: entry.Cateogary,
+        Project: projectOptions.find(opt => String(opt.value) === String(entry.ProjectID))?.label || entry.ProjectID,
+        TaskID: entry.TaskID,
+        Task: entry.Task,
+        Hours: entry.TotalHours,
+        Status: entry.Status,
+        Comment: entry.Comment,
+        ManagerComment: entry.ManagerComment
+      }));
+      // Calculate total hours
+      const totalHours = data.reduce((sum, row) => sum + (parseFloat(row.Hours) || 0), 0);
+      // Add a total row at the end: label in Task, value in Hours
+      data.push({
+        SNo: '',
+        Date: '',
+        EmployeeName: '',
+        Cateogary: '',
+        Project: '',
+        TaskID: '',
+        Task: 'Total Hours =',
+        Hours: totalHours,
+        Status: '',
+        Comment: '',
+        ManagerComment: ''
+      });
+      worksheet.columns = [
+        { header: 'S.No', key: 'SNo', width: 8 },
+        { header: 'Date', key: 'Date', width: 12 },
+        { header: 'Employee Name', key: 'EmployeeName', width: 20 },
+        { header: 'Category', key: 'Cateogary', width: 14 },
+        { header: 'Project', key: 'Project', width: 18 },
+        { header: 'TaskID', key: 'TaskID', width: 10 },
+        { header: 'Task', key: 'Task', width: 30 },
+        { header: 'Hours', key: 'Hours', width: 10 },
+        { header: 'Status', key: 'Status', width: 12 },
+        { header: 'Comment', key: 'Comment', width: 20 },
+        { header: 'ManagerComment', key: 'ManagerComment', width: 20 }
+      ];
+      data.forEach(row => worksheet.addRow(row));
+      // Header styling
+      worksheet.getRow(1).eachCell(cell => {
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF0070C0' }
+        };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
         cell.border = {
           top: { style: 'thin' },
           left: { style: 'thin' },
           bottom: { style: 'thin' },
           right: { style: 'thin' }
         };
-        if (rowNumber % 2 === 0) {
-          cell.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFEAF3FB' }
-          };
-        }
       });
-    });
-
-    // Autofilter
-    worksheet.autoFilter = {
-      from: {
-        row: 1,
-        column: 1
-      },
-      to: {
-        row: 1,
-        column: worksheet.columns.length
-      }
-    };
-
-    // Bold and colored total row
-    const totalRow = worksheet.getRow(data.length + 1);
-    totalRow.eachCell(cell => {
-      cell.font = { bold: true, color: { argb: 'FF0070C0' } };
-      cell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFFDE9D9' }
+      // Banded rows styling
+      worksheet.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) return; // skip header
+        row.eachCell(cell => {
+          cell.alignment = { vertical: 'middle', horizontal: 'left' };
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' }
+          };
+          if (rowNumber % 2 === 0) {
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFEAF3FB' }
+            };
+          }
+        });
+      });
+      // Autofilter
+      worksheet.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: 1, column: worksheet.columns.length }
       };
+      // Bold and colored total row
+      const totalRow = worksheet.getRow(data.length + 1);
+      totalRow.eachCell(cell => {
+        cell.font = { bold: true, color: { argb: 'FF0070C0' } };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFFDE9D9' }
+        };
+      });
     });
 
     // Download file
@@ -482,7 +468,7 @@ const SeeTimesheetTable = () => {
 
       <div className="date-filter-buttons">
         <button className={dateFilterType === 'today' ? 'active' : ''} onClick={() => { setDateFilterType('today'); setSelectedWeekDay(null); }}>Current Day</button>
-        <button className={dateFilterType === 'week' ? 'active' : ''} onClick={() => { setDateFilterType('week'); setSelectedWeekDay(null); }}>Weakly</button>
+        <button className={dateFilterType === 'week' ? 'active' : ''} onClick={() => { setDateFilterType('week'); setSelectedWeekDay(null); }}>Weekly</button>
         <button className={dateFilterType === 'month' ? 'active' : ''} onClick={() => { setDateFilterType('month'); setSelectedWeekDay(null); }}>Monthly</button>
       </div>
 
@@ -572,14 +558,17 @@ const SeeTimesheetTable = () => {
           allLabel="All"
           style={{ minWidth: 180 }}
         />
-        <MultiSelectDropdown
-          label="Employee"
-          options={employeeOptions.map(opt => ({ value: String(opt.value), label: opt.label }))}
-          selected={filters.EmployeeID}
-          onChange={vals => setFilters(prev => ({ ...prev, EmployeeID: vals }))}
-          allLabel="All"
-          style={{ minWidth: 160 }}
-        />
+        {/* Only show Employee filter if roleid is not 1 */}
+        {roleid !== 1 && (
+          <MultiSelectDropdown
+            label="Employee"
+            options={employeeOptions.map(opt => ({ value: String(opt.value), label: opt.label }))}
+            selected={filters.EmployeeID}
+            onChange={vals => setFilters(prev => ({ ...prev, EmployeeID: vals }))}
+            allLabel="All"
+            style={{ minWidth: 160 }}
+          />
+        )}
         <MultiSelectDropdown
           label="Category"
           options={categoryOptions.map(opt => ({ value: opt, label: opt }))}
@@ -625,7 +614,7 @@ const SeeTimesheetTable = () => {
             <tr>
               <th>S.No</th>
               <th>Date</th>
-              <th>Employee Name</th>
+              {roleid !== 1 && <th>Employee Name</th>}
               <th>Category</th>
               <th>Project</th>
               <th>TaskID</th>
@@ -642,7 +631,9 @@ const SeeTimesheetTable = () => {
                 <tr key={entry.EntryID}>
                   <td>{idx + 1}</td>
                   <td>{formatDateTime(entry.Date)}</td>
-                  <td>{employeeOptions.find(opt => opt.value == entry.EmployeeID)?.label || entry.EmployeeID}</td>
+                  {roleid !== 1 && (
+                    <td>{employeeOptions.find(opt => opt.value == entry.EmployeeID)?.label || entry.EmployeeID}</td>
+                  )}
                   <td>{entry.Cateogary}</td>
                   <td>{projectOptions.find(opt => opt.value == entry.ProjectID)?.label || entry.ProjectID}</td>
                   <td>{entry.TaskID}</td>

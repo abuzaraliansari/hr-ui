@@ -21,7 +21,7 @@ const monthNames = [
 ];
 
 const weekDayNames = [
-  'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'
+  'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'
 ];
 
 const categoryOptions = [
@@ -62,9 +62,10 @@ const getWeeksInMonth = (year, month) => {
   return weeks;
 };
 
-// Reusable MultiSelectDropdown component (copied from seetimesheet.js)
+// Enhanced MultiSelectDropdown with search and auto-select
 const MultiSelectDropdown = ({ label, options, selected, onChange, allLabel = 'All', style = {} }) => {
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
   const containerRef = React.useRef(null);
 
   // Close dropdown on outside click
@@ -78,6 +79,21 @@ const MultiSelectDropdown = ({ label, options, selected, onChange, allLabel = 'A
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [open]);
+
+  // Filter options by search
+  const filteredOptions = search
+    ? options.filter(opt => (opt.label || opt).toLowerCase().includes(search.toLowerCase()))
+    : options;
+
+  // Auto-select all matching options on search
+  useEffect(() => {
+    if (search && filteredOptions.length > 0) {
+      onChange(filteredOptions.map(opt => String(opt.value || opt)));
+    } else if (search && filteredOptions.length === 0) {
+      onChange([]);
+    }
+    // eslint-disable-next-line
+  }, [search]);
 
   const handleOptionChange = (value) => {
     if (value === 'ALL') {
@@ -99,10 +115,18 @@ const MultiSelectDropdown = ({ label, options, selected, onChange, allLabel = 'A
       </div>
       {open && (
         <div className="msd-dropdown">
+          <input
+            type="text"
+            className="msd-search"
+            placeholder={`Search ${label}`}
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{ width: '95%', margin: '0.3rem 0.2rem', padding: '0.2rem' }}
+          />
           <label className="msd-option">
             <input type="checkbox" checked={selected.length === 0} onChange={handleAllChange} /> {allLabel}
           </label>
-          {options.map(opt => (
+          {filteredOptions.map(opt => (
             <label className="msd-option" key={opt.value || opt}>
               <input
                 type="checkbox"
@@ -122,11 +146,47 @@ const TimesheetTable = ({ managerFilter }) => {
   const [employeeOptions, setEmployeeOptions] = useState([]);
   const [projectOptions, setProjectOptions] = useState([]);
 
-  let employeeId = user?.EmployeeID;
-  if (!employeeId && user?.name) {
-    const found = employeeOptions.find(opt => opt.label === user.name);
-    if (found) employeeId = found.value;
+  // Fix: define employeeId from user
+  const employeeId = user?.EmployeeID;
+
+  // --- Restrict allowedEmployeeIds based on logged-in user's EmployeeID ---
+  // Map EmployeeID to allowed group
+  const employeeIdGroupMap = {
+    24: [19, 20, 22, 23, 27], // ShelendraTomar (corrected)
+    25: [20, 24, 26, 27, 28, 30], // Hemant
+    23: [1, 2, 3], // Abuzar
+    26: null, // VandanaKumari (super manager, sees all)
+    // Add more mappings as needed
+  };
+
+  // Determine allowedEmployeeIds based on logged-in user's EmployeeID
+  let allowedEmployeeIds = null;
+  let showManagerDropdown = false;
+  let defaultManager = 'VandanaKumari';
+
+  if (user?.EmployeeID === 26) {
+    // Super manager: can select any group
+    showManagerDropdown = true;
+    // Use selected manager from dropdown (default to VandanaKumari)
+    defaultManager = managerFilter?.selectedManager || 'VandanaKumari';
+    // Map manager name to EmployeeID group
+    const managerNameToGroup = {
+      'ShelendraTomar': [1, 2, 3, 19, 22, 23],
+      'Hemant': [20, 24, 26, 27, 28, 30],
+      'Abuzar': [1, 2, 3],
+      'VandanaKumari': null
+    };
+    allowedEmployeeIds = managerNameToGroup[defaultManager];
+  } else if (employeeIdGroupMap[user?.EmployeeID]) {
+    // Manager: restrict to their group
+    allowedEmployeeIds = employeeIdGroupMap[user.EmployeeID];
+    showManagerDropdown = false;
+  } else if (user?.EmployeeID) {
+    // Regular employee: only their own data
+    allowedEmployeeIds = [Number(user.EmployeeID)];
+    showManagerDropdown = false;
   }
+
   const roleName = user?.roles && user.roles.length > 0 ? user.roles[0].roleName.toLowerCase() : '';
   const allowedEmployeeOption = employeeOptions.find(opt => opt.value === String(employeeId));
   const allowedProjectOptions = projectOptions;
@@ -161,13 +221,13 @@ const TimesheetTable = ({ managerFilter }) => {
   const [approveError, setApproveError] = useState('');
 
   // Manager dropdown filter logic
-  const [localManager, setLocalManager] = useState(managerFilter ? managerFilter.selectedManager : 'VandanaKumari');
+  const [localManager, setLocalManager] = useState(defaultManager);
   useEffect(() => {
-    if (managerFilter && managerFilter.setSelectedManager) {
+    if (showManagerDropdown && managerFilter && managerFilter.setSelectedManager) {
       managerFilter.setSelectedManager(localManager);
     }
     // eslint-disable-next-line
-  }, [localManager]);
+  }, [localManager, showManagerDropdown]);
 
   const fetchEntries = useCallback(async () => {
     try {
@@ -256,11 +316,8 @@ const TimesheetTable = ({ managerFilter }) => {
       }
     }
     // Manager filter
-    if (managerFilter && managerFilter.employeeIdMap) {
-      const allowedIds = managerFilter.employeeIdMap[localManager];
-      if (Array.isArray(allowedIds) && !allowedIds.includes(Number(entry.EmployeeID))) {
-        return false;
-      }
+    if (allowedEmployeeIds !== null && !allowedEmployeeIds.includes(Number(entry.EmployeeID))) {
+      return false;
     }
     return (
       (entry.Status === 'Pending' || entry.Status === 'Approved') &&
@@ -344,120 +401,118 @@ const TimesheetTable = ({ managerFilter }) => {
   const handleDownloadExcel = async () => {
     if (filteredEntries.length === 0) return;
 
-    // Prepare data for Excel: show labels for EmployeeName and Project, add S.No
-    const data = filteredEntries.map((entry, idx) => ({
-      SNo: idx + 1,
-      Date: formatDateTime(entry.Date),
-      EmployeeName: employeeOptions.find(opt => String(opt.value) === String(entry.EmployeeID))?.label || entry.EmployeeID,
-      Cateogary: entry.Cateogary,
-      Project: projectOptions.find(opt => String(opt.value) === String(entry.ProjectID))?.label || entry.ProjectID,
-      TaskID: entry.TaskID,
-      Task: entry.Task,
-      Hours: entry.TotalHours,
-      Status: entry.Status,
-      Comment: entry.Comment,
-      ManagerComment: entry.ManagerComment
-    }));
-
-    // Calculate total hours
-    const totalHours = data.reduce((sum, row) => sum + (parseFloat(row.Hours) || 0), 0);
-
-    // Add a total row at the end: label in Task, value in Hours
-    data.push({
-      SNo: '',
-      Date: '',
-      EmployeeName: '',
-      Cateogary: '',
-      Project: '',
-      TaskID: '',
-      Task: 'Total Hours =',
-      Hours: totalHours,
-      Status: '',
-      Comment: '',
-      ManagerComment: ''
+    // Group entries by EmployeeID
+    const entriesByEmployee = {};
+    filteredEntries.forEach(entry => {
+      const empId = String(entry.EmployeeID);
+      if (!entriesByEmployee[empId]) entriesByEmployee[empId] = [];
+      entriesByEmployee[empId].push(entry);
     });
 
-    // Advanced Excel export using exceljs
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('TimesheetData');
 
-    // Define columns (add S.No)
-    worksheet.columns = [
-      { header: 'S.No', key: 'SNo', width: 8 },
-      { header: 'Date', key: 'Date', width: 12 },
-      { header: 'Employee Name', key: 'EmployeeName', width: 20 },
-      { header: 'Category', key: 'Cateogary', width: 14 },
-      { header: 'Project', key: 'Project', width: 18 },
-      { header: 'TaskID', key: 'TaskID', width: 10 },
-      { header: 'Task', key: 'Task', width: 30 },
-      { header: 'Hours', key: 'Hours', width: 10 },
-      { header: 'Status', key: 'Status', width: 12 },
-      { header: 'Comment', key: 'Comment', width: 20 },
-      { header: 'ManagerComment', key: 'ManagerComment', width: 20 }
-    ];
+    // For each employee, create a worksheet
+    Object.entries(entriesByEmployee).forEach(([empId, entries]) => {
+      const empLabel = employeeOptions.find(opt => String(opt.value) === empId)?.label || empId;
+      // Excel worksheet names max 31 chars, remove special chars
+      const safeLabel = empLabel.replace(/[^a-zA-Z0-9 _-]/g, '').substring(0, 31) || `Employee_${empId}`;
+      const worksheet = workbook.addWorksheet(safeLabel);
 
-    // Add rows
-    data.forEach(row => worksheet.addRow(row));
-
-    // Header styling
-    worksheet.getRow(1).eachCell(cell => {
-      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-      cell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FF0070C0' }
-      };
-      cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      cell.border = {
-        top: { style: 'thin' },
-        left: { style: 'thin' },
-        bottom: { style: 'thin' },
-        right: { style: 'thin' }
-      };
-    });
-
-    // Banded rows styling
-    worksheet.eachRow((row, rowNumber) => {
-      if (rowNumber === 1) return; // skip header
-      row.eachCell(cell => {
-        cell.alignment = { vertical: 'middle', horizontal: 'left' };
+      // Prepare data for Excel: show labels for EmployeeName and Project, add S.No
+      const data = entries.map((entry, idx) => ({
+        SNo: idx + 1,
+        Date: formatDateTime(entry.Date),
+        EmployeeName: empLabel,
+        Cateogary: entry.Cateogary,
+        Project: projectOptions.find(opt => String(opt.value) === String(entry.ProjectID))?.label || entry.ProjectID,
+        TaskID: entry.TaskID,
+        Task: entry.Task,
+        Hours: entry.TotalHours,
+        Status: entry.Status,
+        Comment: entry.Comment,
+        ManagerComment: entry.ManagerComment
+      }));
+      // Calculate total hours
+      const totalHours = data.reduce((sum, row) => sum + (parseFloat(row.Hours) || 0), 0);
+      // Add a total row at the end: label in Task, value in Hours
+      data.push({
+        SNo: '',
+        Date: '',
+        EmployeeName: '',
+        Cateogary: '',
+        Project: '',
+        TaskID: '',
+        Task: 'Total Hours =',
+        Hours: totalHours,
+        Status: '',
+        Comment: '',
+        ManagerComment: ''
+      });
+      worksheet.columns = [
+        { header: 'S.No', key: 'SNo', width: 8 },
+        { header: 'Date', key: 'Date', width: 12 },
+        { header: 'Employee Name', key: 'EmployeeName', width: 20 },
+        { header: 'Category', key: 'Cateogary', width: 14 },
+        { header: 'Project', key: 'Project', width: 18 },
+        { header: 'TaskID', key: 'TaskID', width: 10 },
+        { header: 'Task', key: 'Task', width: 30 },
+        { header: 'Hours', key: 'Hours', width: 10 },
+        { header: 'Status', key: 'Status', width: 12 },
+        { header: 'Comment', key: 'Comment', width: 20 },
+        { header: 'ManagerComment', key: 'ManagerComment', width: 20 }
+      ];
+      data.forEach(row => worksheet.addRow(row));
+      // Header styling
+      worksheet.getRow(1).eachCell(cell => {
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF0070C0' }
+        };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
         cell.border = {
           top: { style: 'thin' },
           left: { style: 'thin' },
           bottom: { style: 'thin' },
           right: { style: 'thin' }
         };
-        if (rowNumber % 2 === 0) {
-          cell.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFEAF3FB' }
-          };
-        }
       });
-    });
-
-    // Autofilter
-    worksheet.autoFilter = {
-      from: {
-        row: 1,
-        column: 1
-      },
-      to: {
-        row: 1,
-        column: worksheet.columns.length
-      }
-    };
-
-    // Bold and colored total row
-    const totalRow = worksheet.getRow(data.length + 1);
-    totalRow.eachCell(cell => {
-      cell.font = { bold: true, color: { argb: 'FF0070C0' } };
-      cell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFFDE9D9' }
+      // Banded rows styling
+      worksheet.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) return; // skip header
+        row.eachCell(cell => {
+          cell.alignment = { vertical: 'middle', horizontal: 'left' };
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' }
+          };
+          if (rowNumber % 2 === 0) {
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFEAF3FB' }
+            };
+          }
+        });
+      });
+      // Autofilter
+      worksheet.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: 1, column: worksheet.columns.length }
       };
+      // Bold and colored total row
+      const totalRow = worksheet.getRow(data.length + 1);
+      totalRow.eachCell(cell => {
+        cell.font = { bold: true, color: { argb: 'FF0070C0' } };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFFDE9D9' }
+        };
+      });
     });
 
     // Download file
@@ -529,11 +584,16 @@ const TimesheetTable = ({ managerFilter }) => {
       .catch(() => setProjectOptions([]));
   }, []);
 
+  // Filter employeeOptions for dropdown to only show those visible in table
+  const filteredEmployeeOptions = allowedEmployeeIds === null
+    ? employeeOptions
+    : employeeOptions.filter(opt => allowedEmployeeIds.includes(Number(opt.value)));
+
   return (
     <div className="timesheet-table-container">
       <h2>Approve TimeSheet</h2>
       {/* Manager dropdown filter before date filter */}
-      {managerFilter && (
+      {showManagerDropdown && managerFilter && (
         <div className="filters" style={{ display: 'flex', gap: '2rem', justifyContent: 'center', marginBottom: '2rem' }}>
           <div className="msd-container" style={{ minWidth: 180 }}>
             <div className="msd-label">
@@ -557,7 +617,7 @@ const TimesheetTable = ({ managerFilter }) => {
 
       <div className="date-filter-buttons">
         <button className={dateFilterType === 'today' ? 'active' : ''} onClick={() => { setDateFilterType('today'); setSelectedWeekDay(null); }}>Current Day</button>
-        <button className={dateFilterType === 'week' ? 'active' : ''} onClick={() => { setDateFilterType('week'); setSelectedWeekDay(null); }}>Weakly</button>
+        <button className={dateFilterType === 'week' ? 'active' : ''} onClick={() => { setDateFilterType('week'); setSelectedWeekDay(null); }}>Weekly</button>
         <button className={dateFilterType === 'month' ? 'active' : ''} onClick={() => { setDateFilterType('month'); setSelectedWeekDay(null); }}>Monthly</button>
       </div>
 
@@ -652,7 +712,7 @@ const TimesheetTable = ({ managerFilter }) => {
         />
         <MultiSelectDropdown
           label="Employee"
-          options={employeeOptions.map(opt => ({ value: String(opt.value), label: opt.label }))}
+          options={filteredEmployeeOptions.map(opt => ({ value: String(opt.value), label: opt.label }))}
           selected={filters.EmployeeID}
           onChange={vals => setFilters(prev => ({ ...prev, EmployeeID: vals }))}
           allLabel="All"

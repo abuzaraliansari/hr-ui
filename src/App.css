@@ -404,7 +404,7 @@ html, body, #root {
 .timesheet-table-container {
   margin: 40px auto;
   padding: 20px;
-  max-width: 1200px;
+  max-width: 2000px;
 }
 
 .timesheet-table-container h2 {
@@ -668,6 +668,8 @@ body, html, #root {
 .approve-btns-container{
   display: flex;
   justify-content: center;
+  margin-top: 30px;
+  margin-bottom: 30px;
 }
 
 .delete-btn {
@@ -741,10 +743,6 @@ tr.editing-row {
 
 .rejected-entries-table tr:hover {
   background: #ffeaea;
-}
-
-.timesheet-table-container {
-  /* Add container styles if needed */
 }
 
 .error-message {
@@ -864,7 +862,7 @@ textarea.comment-textarea {
   border-radius: 4px;
   padding: 10px 10px;
   cursor: pointer;
-  margin-top: 10px;
+  margin-top: 30px;
   display: block;
   margin-left: auto;
   margin-right: auto;

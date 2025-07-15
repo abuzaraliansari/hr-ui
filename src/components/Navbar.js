@@ -18,14 +18,16 @@ const Navbar = () => {
   // Don't show nav links if not authenticated or on login page
   if (!user || location.pathname === '/') {
     return (
-      <header className="navbar-header navbar-header-simple">
-        <div className="navbar-logo-container">
+      <header className="navbar-header navbar-header-simple" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+        <div className="navbar-logo-container" style={{ minWidth: 220, display: 'flex', alignItems: 'center' }}>
           <img src="https://www.intmavens.com/wp-content/uploads/2022/09/logo-300x180.png" alt="IntMavens Logo" className="navbar-logo" />
-        <span className="navbar-title">IntMavens</span>
-      </div>
-      <div className="navbar-center-title">
-        <span className="navbar-center-text">Timesheet Management</span>
-      </div>
+          <span className="navbar-title">IntMavens</span>
+        </div>
+        <div className="navbar-center-title" style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', minWidth: 0 }}>
+          <span className="navbar-center-text" style={{ fontWeight: 600, fontSize: '1.5rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Timesheet Management</span>
+        </div>
+        {/* Empty div to balance flex layout, prevents overlap/wrapping */}
+        <div style={{ minWidth: 220 }}></div>
       </header>
     );
   }
@@ -77,13 +79,12 @@ const Navbar = () => {
               </Link>
             </li>
           )}
-          {user?.roles?.[0]?.roleName !== 'user' && (
-             <li>
+          {(user?.EmployeeID === 24 || user?.EmployeeID === 25 || user?.EmployeeID === 26) && (
+            <li>
               <Link to="/managerTimesheet" className="navbar-link" onClick={() => setNavOpen(false)}>
                 Approve On Behalf
               </Link>
             </li>
-            
           )}
           <li>
             <button
