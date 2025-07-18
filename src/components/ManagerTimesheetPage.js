@@ -168,18 +168,11 @@ const ManagerTimesheetPage = () => {
     }
   }, [user?.EmployeeID]);
 
-  // --- Determine allowedEmployeeIds based on API-managedEmployees ---
-  let allowedEmployeeIds = null;
-  if (user?.IsManager && user.managedEmployees && user.managedEmployees.length > 0) {
-    // Manager with managed employees from API: show only those employees
-    allowedEmployeeIds = user.managedEmployees.map(e => e.EmployeeID);
-  } else if (user?.IsManager && (!user.managedEmployees || user.managedEmployees.length === 0)) {
-    // Manager with no managed employees: show all employees
-    allowedEmployeeIds = null;
-  } else {
-    // Not a manager: do not fetch or show any data
-    allowedEmployeeIds = [];
-  }
+  const employeeIdMap = {
+    ShelendraTomar: [19, 20, 22, 23, 27],
+    Hemant: [20, 24, 26, 27, 28, 30],
+    Abuzar: [1, 2, 3],
+  };
 
   const [employeeOptions, setEmployeeOptions] = useState([]);
   const [projectOptions, setProjectOptions] = useState([]);
@@ -325,7 +318,8 @@ const ManagerTimesheetPage = () => {
       }
     }
     // Manager filter
-    if (allowedEmployeeIds !== null && !allowedEmployeeIds.includes(Number(entry.EmployeeID))) {
+    const allowedIds = employeeIdMap[localManager];
+    if (Array.isArray(allowedIds) && !allowedIds.includes(Number(entry.EmployeeID))) {
       return false;
     }
     return (
@@ -522,7 +516,7 @@ const ManagerTimesheetPage = () => {
           fgColor: { argb: 'FFFDE9D9' }
         };
       });
-    });
+    }); // <-- Ensure this closes the forEach
 
     // Download file
     const buffer = await workbook.xlsx.writeBuffer();
@@ -592,6 +586,14 @@ const ManagerTimesheetPage = () => {
       .then(res => setProjectOptions(res.data))
       .catch(() => setProjectOptions([]));
   }, []);
+
+  // Determine allowedEmployeeIds based on selected manager in the dropdown
+  let allowedEmployeeIds = null;
+  if (localManager && employeeIdMap[localManager]) {
+    allowedEmployeeIds = employeeIdMap[localManager];
+  } else {
+    allowedEmployeeIds = null; // Show all if no manager selected or mapping missing
+  }
 
   return (
     <div className="timesheet-table-container">
@@ -745,7 +747,11 @@ const ManagerTimesheetPage = () => {
         />
         <MultiSelectDropdown
           label="Employee"
-          options={employeeOptions.map(opt => ({ value: String(opt.value), label: opt.label }))}
+          options={
+            Array.isArray(allowedEmployeeIds)
+              ? employeeOptions.filter(opt => allowedEmployeeIds.includes(Number(opt.value))).map(opt => ({ value: String(opt.value), label: opt.label }))
+              : employeeOptions.map(opt => ({ value: String(opt.value), label: opt.label }))
+          }
           selected={filters.EmployeeID}
           onChange={vals => setFilters(prev => ({ ...prev, EmployeeID: vals }))}
           allLabel="All"
