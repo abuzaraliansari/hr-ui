@@ -149,41 +149,25 @@ const TimesheetTable = ({ managerFilter }) => {
   // Fix: define employeeId from user
   const employeeId = user?.EmployeeID;
 
-  // --- Restrict allowedEmployeeIds based on logged-in user's EmployeeID ---
-  // Map EmployeeID to allowed group
-  const employeeIdGroupMap = {
-    24: [19, 20, 22, 23, 27], // ShelendraTomar (corrected)
-    25: [20, 24, 26, 27, 28, 30], // Hemant
-    23: [1, 2, 3], // Abuzar
-    26: null, // VandanaKumari (super manager, sees all)
-    // Add more mappings as needed
-  };
-
-  // Determine allowedEmployeeIds based on logged-in user's EmployeeID
+  // --- Determine allowedEmployeeIds based on API-managedEmployees ---
   let allowedEmployeeIds = null;
   let showManagerDropdown = false;
-  let defaultManager = 'VandanaKumari';
 
-  if (user?.EmployeeID === 26) {
-    // Super manager: can select any group
-    showManagerDropdown = true;
-    // Use selected manager from dropdown (default to VandanaKumari)
-    defaultManager = managerFilter?.selectedManager || 'VandanaKumari';
-    // Map manager name to EmployeeID group
-    const managerNameToGroup = {
-      'ShelendraTomar': [1, 2, 3, 19, 22, 23],
-      'Hemant': [20, 24, 26, 27, 28, 30],
-      'Abuzar': [1, 2, 3],
-      'VandanaKumari': null
-    };
-    allowedEmployeeIds = managerNameToGroup[defaultManager];
-  } else if (employeeIdGroupMap[user?.EmployeeID]) {
-    // Manager: restrict to their group
-    allowedEmployeeIds = employeeIdGroupMap[user.EmployeeID];
+  if (user?.IsManager && user.managedEmployees && user.managedEmployees.length > 0) {
+    // Manager with managed employees from API: show only those employees
+    allowedEmployeeIds = user.managedEmployees.map(e => e.EmployeeID);
     showManagerDropdown = false;
-  } else if (user?.EmployeeID) {
+  } else if (user?.IsManager && (!user.managedEmployees || user.managedEmployees.length === 0)) {
+    // Manager with no managed employees: show all employees
+    allowedEmployeeIds = null;
+    showManagerDropdown = false;
+  } else if (!user?.IsManager && user?.EmployeeID) {
     // Regular employee: only their own data
     allowedEmployeeIds = [Number(user.EmployeeID)];
+    showManagerDropdown = false;
+  } else {
+    // Not a manager and no EmployeeID: show nothing
+    allowedEmployeeIds = [];
     showManagerDropdown = false;
   }
 
@@ -221,7 +205,7 @@ const TimesheetTable = ({ managerFilter }) => {
   const [approveError, setApproveError] = useState('');
 
   // Manager dropdown filter logic
-  const [localManager, setLocalManager] = useState(defaultManager);
+  const [localManager, setLocalManager] = useState('VandanaKumari');
   useEffect(() => {
     if (showManagerDropdown && managerFilter && managerFilter.setSelectedManager) {
       managerFilter.setSelectedManager(localManager);

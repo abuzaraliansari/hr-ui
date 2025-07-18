@@ -168,11 +168,18 @@ const ManagerTimesheetPage = () => {
     }
   }, [user?.EmployeeID]);
 
-  const employeeIdMap = {
-    ShelendraTomar: [19, 20, 22, 23, 27],
-    Hemant: [20, 24, 26, 27, 28, 30],
-    Abuzar: [1, 2, 3],
-  };
+  // --- Determine allowedEmployeeIds based on API-managedEmployees ---
+  let allowedEmployeeIds = null;
+  if (user?.IsManager && user.managedEmployees && user.managedEmployees.length > 0) {
+    // Manager with managed employees from API: show only those employees
+    allowedEmployeeIds = user.managedEmployees.map(e => e.EmployeeID);
+  } else if (user?.IsManager && (!user.managedEmployees || user.managedEmployees.length === 0)) {
+    // Manager with no managed employees: show all employees
+    allowedEmployeeIds = null;
+  } else {
+    // Not a manager: do not fetch or show any data
+    allowedEmployeeIds = [];
+  }
 
   const [employeeOptions, setEmployeeOptions] = useState([]);
   const [projectOptions, setProjectOptions] = useState([]);
@@ -318,8 +325,7 @@ const ManagerTimesheetPage = () => {
       }
     }
     // Manager filter
-    const allowedIds = employeeIdMap[localManager];
-    if (Array.isArray(allowedIds) && !allowedIds.includes(Number(entry.EmployeeID))) {
+    if (allowedEmployeeIds !== null && !allowedEmployeeIds.includes(Number(entry.EmployeeID))) {
       return false;
     }
     return (
