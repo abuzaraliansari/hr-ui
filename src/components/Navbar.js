@@ -27,8 +27,10 @@ const Navbar = () => {
         <div className="navbar-center-title" style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', minWidth: 0 }}>
           <span className="navbar-center-text" style={{ fontWeight: 600, fontSize: '1.5rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Timesheet Management</span>
         </div>
-        {/* Empty div to balance flex layout, prevents overlap/wrapping */}
-        <div style={{ minWidth: 220 }}></div>
+        {/* Username display for not logged in */}
+        <div style={{ minWidth: 220, textAlign: 'right', color: '#555', fontWeight: 500 }}>
+          {user ? `Logged in as: ${user.username || user.name || user.email || ''}` : 'Not logged in'}
+        </div>
       </header>
     );
   }
@@ -71,7 +73,6 @@ const Navbar = () => {
               Timesheet
             </button>
             <ul className={`navbar-dropdown-menu${openDropdown === 'timesheet' ? ' show' : ''}`}>
-
               <li>
                 <Link to="/TimesheetEntry" className="navbar-link" onClick={() => { setNavOpen(false); setOpenDropdown(null); }}>
                   Timesheet Entry
@@ -128,7 +129,7 @@ const Navbar = () => {
               onClick={() => setOpenDropdown(openDropdown === 'userManagement' ? null : 'userManagement')}
               type="button"
             >
-              User Management
+               welcome: {user?.username || user?.name || user?.email || ''}
             </button>
             <ul className={`navbar-dropdown-menu${openDropdown === 'userManagement' ? ' show' : ''}`}>
               <li>
@@ -149,7 +150,11 @@ const Navbar = () => {
             </ul>
           </li>
 
-          <li>
+          {/* Username above logout */}
+          <li style={{ display: 'flex', flexDirection: 'column', alignItems: 'center',justifyContent:'center', minWidth: 180, marginLeft: 12 }}>
+            <span style={{ color: '#36aaff', fontWeight: 600, fontSize: '1.1rem', marginBottom: 2, letterSpacing: 0.5 }}>
+             
+            </span>
             <button
               onClick={() => {
                 setNavOpen(false);
