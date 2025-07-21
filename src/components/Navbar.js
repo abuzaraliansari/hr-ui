@@ -88,73 +88,92 @@ const Navbar = () => {
           </li>
 
           {/* Approve Dropdown */}
-          <li
-            className="navbar-dropdown"
-            onMouseEnter={() => setOpenDropdown('approve')}
-            onMouseLeave={() => setOpenDropdown(null)}
-          >
-            <button
-              className="navbar-link navbar-dropdown-btn"
-              onClick={() => setOpenDropdown(openDropdown === 'approve' ? null : 'approve')}
-              type="button"
+          {user?.roles?.[0]?.roleName !== 'user' && (
+            <li
+              className="navbar-dropdown"
+              onMouseEnter={() => setOpenDropdown('approve')}
+              onMouseLeave={() => setOpenDropdown(null)}
             >
-              Approve
-            </button>
-            <ul className={`navbar-dropdown-menu${openDropdown === 'approve' ? ' show' : ''}`}>
-              {user?.roles?.[0]?.roleName !== 'user' && (
+              <button
+                className="navbar-link navbar-dropdown-btn"
+                onClick={() => setOpenDropdown(openDropdown === 'approve' ? null : 'approve')}
+                type="button"
+              >
+                Approve
+              </button>
+              <ul className={`navbar-dropdown-menu${openDropdown === 'approve' ? ' show' : ''}`}>
                 <li>
                   <Link to="/ApproveTimesheet" className="navbar-link" onClick={() => { setNavOpen(false); setOpenDropdown(null); }}>
                     Approve TimeSheet Entry
                   </Link>
                 </li>
-              )}
-              {(user?.EmployeeID === 24 || user?.EmployeeID === 25 || user?.EmployeeID === 26) && (
-                <li>
-                  <Link to="/managerTimesheet" className="navbar-link" onClick={() => { setNavOpen(false); setOpenDropdown(null); }}>
-                    Approve On Behalf
-                  </Link>
-                </li>
-              )}
-            </ul>
-          </li>
-
-         
+                {(user?.EmployeeID === 24 || user?.EmployeeID === 25 || user?.EmployeeID === 26) && (
+                  <li>
+                    <Link to="/managerTimesheet" className="navbar-link" onClick={() => { setNavOpen(false); setOpenDropdown(null); }}>
+                      Approve On Behalf
+                    </Link>
+                  </li>
+                )}
+              </ul>
+            </li>
+          )}
 
           {/* Username above logout */}
           <li style={{ display: 'flex', flexDirection: 'row', alignItems: 'center',justifyContent:'center', minWidth: 180, marginLeft: 12 }}>
-            <span>
-              {/* User Management Dropdown */}
-          <li
-            className="navbar-dropdown"
-            onMouseEnter={() => setOpenDropdown('userManagement')}
-            onMouseLeave={() => setOpenDropdown(null)}
-          >
-            <button
-              className="navbar-link navbar-dropdown-btn"
-              onClick={() => setOpenDropdown(openDropdown === 'userManagement' ? null : 'userManagement')}
-              type="button"
-            >
-               welcome: {user?.username || user?.name || user?.email || ''}
-            </button>
-            <ul className={`navbar-dropdown-menu${openDropdown === 'userManagement' ? ' show' : ''}`}>
-              <li>
-                <Link to="/userdetails" className="navbar-link" onClick={() => { setNavOpen(false); setOpenDropdown(null); }}>
-                  User Details
-                </Link>
-              </li>
-              <li>
-                <Link to="/adduser" className="navbar-link" onClick={() => { setNavOpen(false); setOpenDropdown(null); }}>
-                  Add User
-                </Link>
-              </li>
-              <li>
-                <Link to="/password" className="navbar-link" onClick={() => { setNavOpen(false); setOpenDropdown(null); }}>
-                  Change Password
-                </Link>
-              </li>
-            </ul>
-          </li>
-            </span>
+            {/* User Management Dropdown */}
+            {user?.roles?.[0]?.roleName !== 'user' ? (
+              <>
+                <span style={{ marginRight: 8 }}></span>
+                <div
+                  className="navbar-dropdown"
+                  onMouseEnter={() => setOpenDropdown('userManagement')}
+                  onMouseLeave={() => setOpenDropdown(null)}
+                  style={{ display: 'inline-block' }}
+                >
+                  <button
+                    className="navbar-link navbar-dropdown-btn"
+                    onClick={() => setOpenDropdown(openDropdown === 'userManagement' ? null : 'userManagement')}
+                    type="button"
+                  >
+                    welcome: {user?.username || user?.name || user?.email || ''}
+                  </button>
+                  <ul className={openDropdown === 'userManagement' ? 'navbar-dropdown-menu show' : 'navbar-dropdown-menu'}>
+                    <li>
+                      <Link to="/userdetails" className="navbar-link" onClick={() => { setNavOpen(false); setOpenDropdown(null); }}>
+                        User Details
+                      </Link>
+                    </li>
+                    <li>
+                      <Link to="/adduser" className="navbar-link" onClick={() => { setNavOpen(false); setOpenDropdown(null); }}>
+                        Add User
+                      </Link>
+                    </li>
+                    <li>
+                      <Link to="/password" className="navbar-link" onClick={() => { setNavOpen(false); setOpenDropdown(null); }}>
+                        Change Password
+                      </Link>
+                    </li>
+                  </ul>
+                </div>
+              </>
+            ) : (
+              <div className="navbar-dropdown" style={{ display: 'inline-block' }}>
+                <button
+                  className="navbar-link navbar-dropdown-btn"
+                  onClick={() => setOpenDropdown(openDropdown === 'userManagement' ? null : 'userManagement')}
+                  type="button"
+                >
+                  welcome: {user?.username || user?.name || user?.email || ''}
+                </button>
+                <ul className={openDropdown === 'userManagement' ? 'navbar-dropdown-menu show' : 'navbar-dropdown-menu'}>
+                  <li>
+                    <Link to="/password" className="navbar-link" onClick={() => { setNavOpen(false); setOpenDropdown(null); }}>
+                      Change Password
+                    </Link>
+                  </li>
+                </ul>
+              </div>
+            )}
             <button
               onClick={() => {
                 setNavOpen(false);
@@ -162,6 +181,7 @@ const Navbar = () => {
               }}
               className="logout-btn"
               type="button"
+              style={{ marginRight: '2px' }}
             >
               Logout
             </button>
@@ -169,53 +189,53 @@ const Navbar = () => {
         </ul>
       </nav>
       <style>{`
-        .navbar-dropdown {
-          position: relative;
-        }
-        .navbar-dropdown-btn {
-          background: none;
-          border: none;
-          color: inherit;
-          font: inherit;
-          cursor: pointer;
-          padding: 0.5rem 1rem;
-        }
-        .navbar-dropdown-menu {
-          display: none;
-          position: absolute;
-          left: 0;
-          top: 100%;
-          background: #fff;
-          min-width: 180px;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-          z-index: 100;
-          padding: 0.5rem 0;
-          border-radius: 4px;
-        }
-        .navbar-dropdown-menu.show {
-          display: block;
-        }
-        .navbar-dropdown-menu li {
-          list-style: none;
-        }
-        .navbar-dropdown-menu .navbar-link {
-          display: block;
-          padding: 0.5rem 1.2rem;
-          color: #333;
-          text-decoration: none;
-        }
-        .navbar-dropdown-menu .navbar-link:hover {
-          background: #f0f0f0;
-        }
-        @media (max-width: 900px) {
-          .navbar-dropdown-menu {
-            position: static;
-            box-shadow: none;
-            background: none;
-            min-width: 0;
-            padding: 0;
-          }
-        }
+.navbar-dropdown {
+position: relative;
+}
+.navbar-dropdown-btn {
+background: none;
+border: none;
+color: inherit;
+font: inherit;
+cursor: pointer;
+padding: 0.5rem 1rem;
+}
+.navbar-dropdown-menu {
+display: none;
+position: absolute;
+left: 0;
+top: 100%;
+background: #fff;
+min-width: 180px;
+box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+z-index: 100;
+padding: 0.5rem 0;
+border-radius: 4px;
+}
+.navbar-dropdown-menu.show {
+display: block;
+}
+.navbar-dropdown-menu li {
+list-style: none;
+}
+.navbar-dropdown-menu .navbar-link {
+display: block;
+padding: 0.5rem 1.2rem;
+color: #333;
+text-decoration: none;
+}
+.navbar-dropdown-menu .navbar-link:hover {
+background: #f0f0f0;
+}
+@media (max-width: 900px) {
+.navbar-dropdown-menu {
+position: static;
+box-shadow: none;
+background: none;
+min-width: 0;
+padding: 0;
+}
+}
       `}</style>
     </header>
   );

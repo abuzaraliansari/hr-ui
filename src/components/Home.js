@@ -86,11 +86,12 @@ const Home = () => {
         <button className="home-btn" onClick={() => navigate(`/password`)}>
           Change Password
         </button>
+        {roleName !== 'user' && (
+          <>
          <button className="home-btn" onClick={() => navigate(`/AddUser`)}>
           Add user
         </button>
-        {roleName !== 'user' && (
-          <>
+        
             <button className="home-btn" onClick={() => navigate(`/ApproveTimesheet`)}>
               Approve  TimeSheet Entry
             </button>
