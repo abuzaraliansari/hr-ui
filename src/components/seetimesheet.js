@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import axios from 'axios';
 import {
   getAllTimesheetEntries,
@@ -73,30 +73,19 @@ const MultiSelectDropdown = ({ label, options, selected, onChange, allLabel = 'A
     return () => document.removeEventListener('mousedown', handleClick);
   }, [open]);
 
-  // Auto-select all matching options and clear previous selections when search changes
-  useEffect(() => {
-    if (search.length > 0) {
-      const filtered = options.filter(opt => {
-        const labelText = (opt.label || opt).toLowerCase();
-        return labelText.includes(search.toLowerCase());
-      });
-      const filteredValues = filtered.map(opt => String(opt.value || opt));
-      // Only update if selection is different
-      if (JSON.stringify(selected) !== JSON.stringify(filteredValues)) {
-        onChange(filteredValues);
-      }
-    }
-  // Only run when search changes
-  }, [search]);
+  // Fix: Only auto-select all matching options if search is used and user presses Enter
+  // Remove auto-select on every search change (causes confusion with All logic)
 
   const handleOptionChange = (value) => {
     if (value === 'ALL') {
-      onChange([]);
+      onChange([]); // All means no filter
     } else {
       if (selected.includes(value)) {
-        onChange(selected.filter(v => v !== value));
+        const newSelected = selected.filter(v => v !== value);
+        onChange(newSelected);
       } else {
-        onChange([...selected, value]);
+        const newSelected = [...selected, value];
+        onChange(newSelected);
       }
     }
   };
@@ -107,6 +96,9 @@ const MultiSelectDropdown = ({ label, options, selected, onChange, allLabel = 'A
     const label = (opt.label || opt).toLowerCase();
     return label.includes(search.toLowerCase());
   });
+
+  // Fix: All is checked only if selected.length === 0
+  // Individual options are checked if in selected
 
   return (
     <div className="msd-container" style={{ minWidth: 120, ...style }} ref={containerRef}>
@@ -150,7 +142,25 @@ const SeeTimesheetTable = () => {
   const [employeeOptions, setEmployeeOptions] = useState([]);
   const [projectOptions, setProjectOptions] = useState([]);
   const employeeId = user?.EmployeeID;
-  const roleid = user?.roles && user.roles.length > 0 ? user.roles[0].roleid : null;
+  const isManager = user?.IsManager;
+  const managedEmployees = user?.managedEmployees || [];
+
+  // --- Determine allowedEmployeeIds and filteredEmployeeOptions ---
+  const allowedEmployeeIds = React.useMemo(() => {
+    if (isManager && managedEmployees.length > 0) {
+      return managedEmployees.map(e => e.EmployeeID);
+    } else if (!isManager && employeeId) {
+      return [Number(employeeId)];
+    } else {
+      return [];
+    }
+  }, [isManager, managedEmployees, employeeId]);
+
+  // Only show employee filter for managers
+  const filteredEmployeeOptions = isManager && managedEmployees.length > 0
+    ? employeeOptions.filter(opt => allowedEmployeeIds.includes(Number(opt.value)))
+    : employeeOptions.filter(opt => Number(opt.value) === Number(employeeId));
+
   const [entries, setEntries] = useState([]);
   const [filters, setFilters] = useState({
     ProjectsName: [],
@@ -163,74 +173,82 @@ const SeeTimesheetTable = () => {
     EmployeeID: [],
     Status: []
   });
-  const [dateFilterType, setDateFilterType] = useState('today');
+  // Set default dateFilterType to 'week' and weekOffset to -1 (previous week)
+  const [dateFilterType, setDateFilterType] = useState('week');
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedWeekDay, setSelectedWeekDay] = useState(null);
   const [selectedMonthWeek, setSelectedMonthWeek] = useState(null);
-  const [weekOffset, setWeekOffset] = useState(0);
+  const [weekOffset, setWeekOffset] = useState(-1);
+  const lastFetchedEmployeeIds = useRef([]);
 
-
-  // Fetch entries based on roleId
-  const fetchEntries = useCallback(async () => {
+  // Fetch entries based on selected employees
+  const fetchEntries = useCallback(async (employeeIds = null) => {
     try {
       let response;
-      // Use roleId from user.roles[0].roleId
-      const userRoleId = user?.roles && user.roles.length > 0 ? user.roles[0].roleId : null;
-      if (userRoleId === 1 && employeeId) {
-        const payloadEmployeeId = Number(employeeId);
-        response = await getAllTimesheetEntries(payloadEmployeeId);
-        setEntries(response.data);
-        const uniqueOptions = {
-          ProjectsName: [
-            ...new Set(
-              response.data
-                .map((entry) => projectOptions.find(opt => opt.value === String(entry.ProjectID))?.label)
-                .filter(Boolean)
-            )
-          ],
-          Status: [...new Set(response.data.map((entry) => entry.Status))]
-        };
-        setFilterOptions(uniqueOptions);
+      if (employeeIds && employeeIds.length > 0) {
+        response = await getAllTimesheetEntries(employeeIds);
+      } else if (allowedEmployeeIds && allowedEmployeeIds.length > 0) {
+        response = await getAllTimesheetEntries([allowedEmployeeIds[0]]);
       } else {
         response = await getAllTimesheetEntries();
-        setEntries(response.data);
-        const uniqueOptions = {
-          ProjectsName: [
-            ...new Set(
-              response.data
-                .map((entry) => projectOptions.find(opt => opt.value === String(entry.ProjectID))?.label)
-                .filter(Boolean)
-            )
-          ],
-          EmployeeID: [...new Set(response.data.map((entry) => entry.EmployeeID))],
-          Status: [...new Set(response.data.map((entry) => entry.Status))]
-        };
-        setFilterOptions(uniqueOptions);
       }
+      setEntries(response.data);
+      const uniqueOptions = {
+        ProjectsName: [
+          ...new Set(
+            response.data
+              .map((entry) => projectOptions.find(opt => opt.value === String(entry.ProjectID))?.label)
+              .filter(Boolean)
+          )
+        ],
+        EmployeeID: [...new Set(response.data.map((entry) => entry.EmployeeID))],
+        Status: [...new Set(response.data.map((entry) => entry.Status))]
+      };
+      setFilterOptions(uniqueOptions);
     } catch (error) {
       console.error('Error fetching timesheet entries:', error);
     }
-  }, [employeeId, projectOptions, user]);
+  }, [projectOptions, allowedEmployeeIds]);
 
+  // Fetch on mount or when allowedEmployeeIds changes (default: first allowed employee only)
   useEffect(() => {
-    if (employeeId) {
+    if (allowedEmployeeIds && allowedEmployeeIds.length > 0) {
+      // On first mount, set EmployeeID filter to first allowed employee (not All)
+      setFilters(f => ({ ...f, EmployeeID: [String(allowedEmployeeIds[0])] }));
+      fetchEntries([allowedEmployeeIds[0]]);
+      lastFetchedEmployeeIds.current = [allowedEmployeeIds[0]];
+    } else {
       fetchEntries();
+      lastFetchedEmployeeIds.current = [];
     }
     // eslint-disable-next-line
-  }, [employeeId]);
+  }, [allowedEmployeeIds]);
 
+  // Fetch when Employee filter changes
+  useEffect(() => {
+    let idsToFetch = [];
+    if (filters.EmployeeID && filters.EmployeeID.length > 0) {
+      idsToFetch = filters.EmployeeID.map(Number);
+    } else if (allowedEmployeeIds && allowedEmployeeIds.length > 0) {
+      // If manager and Employee filter is 'All', fetch for all managed employees
+      idsToFetch = allowedEmployeeIds;
+    }
+    if (JSON.stringify(idsToFetch) !== JSON.stringify(lastFetchedEmployeeIds.current)) {
+      fetchEntries(idsToFetch);
+      lastFetchedEmployeeIds.current = idsToFetch;
+    }
+    // eslint-disable-next-line
+  }, [filters.EmployeeID, allowedEmployeeIds]);
+
+  // When dateFilterType changes, reset weekOffset to -1 if switching to week
   useEffect(() => {
     if (dateFilterType === 'month') {
       setSelectedMonth(new Date().getMonth());
     }
     if (dateFilterType !== 'week') {
       setSelectedWeekDay(null);
-    }
-  }, [dateFilterType]);
-
-  useEffect(() => {
-    if (dateFilterType === 'week') {
-      setWeekOffset(0);
+    } else {
+      setWeekOffset(-1); // Always show previous week when switching to week view
     }
   }, [dateFilterType]);
 
@@ -559,10 +577,10 @@ const SeeTimesheetTable = () => {
           style={{ minWidth: 180 }}
         />
         {/* Only show Employee filter if roleid is not 1 */}
-        {roleid !== 1 && (
+        {isManager && managedEmployees.length > 0 && (
           <MultiSelectDropdown
             label="Employee"
-            options={employeeOptions.map(opt => ({ value: String(opt.value), label: opt.label }))}
+            options={filteredEmployeeOptions.map(opt => ({ value: String(opt.value), label: opt.label }))}
             selected={filters.EmployeeID}
             onChange={vals => setFilters(prev => ({ ...prev, EmployeeID: vals }))}
             allLabel="All"
@@ -614,7 +632,7 @@ const SeeTimesheetTable = () => {
             <tr>
               <th>S.No</th>
               <th>Date</th>
-              {roleid !== 1 && <th>Employee Name</th>}
+              {isManager && managedEmployees.length > 0 && <th>Employee Name</th>}
               <th>Category</th>
               <th>Project</th>
               <th>TaskID</th>
@@ -631,7 +649,7 @@ const SeeTimesheetTable = () => {
                 <tr key={entry.EntryID}>
                   <td>{idx + 1}</td>
                   <td>{formatDateTime(entry.Date)}</td>
-                  {roleid !== 1 && (
+                  {isManager && managedEmployees.length > 0 && (
                     <td>{employeeOptions.find(opt => opt.value == entry.EmployeeID)?.label || entry.EmployeeID}</td>
                   )}
                   <td>{entry.Cateogary}</td>

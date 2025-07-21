@@ -20,9 +20,19 @@ export const approveTimesheetEntry = (data) =>
 export const submitTimesheet = (employeeId) =>
   axios.post(`${API_URL}/submit`, { EmployeeID: employeeId });
 
-export const getAllTimesheetEntries = (employeeId) => {
-  console.log('Calling getAllTimesheetEntries with EmployeeID:', employeeId);
-  return axios.post(`${API_URL}/entries`, employeeId ? { EmployeeID: employeeId } : {});
+export const getAllTimesheetEntries = (employeeIds) => {
+  // Accepts employeeIds as array or single value
+  let body;
+  if (Array.isArray(employeeIds)) {
+    // Convert to numbers for API
+    body = { EmployeeIDs: employeeIds.map(Number) };
+  } else if (employeeIds) {
+    body = { EmployeeIDs: [Number(employeeIds)] };
+  } else {
+    body = {};
+  }
+  console.log('Calling getAllTimesheetEntries with body:', body);
+  return axios.post(`${API_URL}/entries`, body);
 };
 
 

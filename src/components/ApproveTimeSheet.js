@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import axios from 'axios';
 import {
   getAllTimesheetEntries,
@@ -150,26 +150,23 @@ const TimesheetTable = ({ managerFilter }) => {
   const employeeId = user?.EmployeeID;
 
   // --- Determine allowedEmployeeIds based on API-managedEmployees ---
-  let allowedEmployeeIds = null;
-  let showManagerDropdown = false;
+  const allowedEmployeeIds = React.useMemo(() => {
+    if (user?.IsManager && user.managedEmployees && user.managedEmployees.length > 0) {
+      // Manager with managed employees from API: show only those employees
+      return user.managedEmployees.map(e => e.EmployeeID);
+    } else if (user?.IsManager && (!user.managedEmployees || user.managedEmployees.length === 0)) {
+      // Manager with no managed employees: show all employees
+      return null;
+    } else if (!user?.IsManager && user?.EmployeeID) {
+      // Regular employee: only their own data
+      return [Number(user.EmployeeID)];
+    } else {
+      // Not a manager and no EmployeeID: show nothing
+      return [];
+    }
+  }, [user]);
 
-  if (user?.IsManager && user.managedEmployees && user.managedEmployees.length > 0) {
-    // Manager with managed employees from API: show only those employees
-    allowedEmployeeIds = user.managedEmployees.map(e => e.EmployeeID);
-    showManagerDropdown = false;
-  } else if (user?.IsManager && (!user.managedEmployees || user.managedEmployees.length === 0)) {
-    // Manager with no managed employees: show all employees
-    allowedEmployeeIds = null;
-    showManagerDropdown = false;
-  } else if (!user?.IsManager && user?.EmployeeID) {
-    // Regular employee: only their own data
-    allowedEmployeeIds = [Number(user.EmployeeID)];
-    showManagerDropdown = false;
-  } else {
-    // Not a manager and no EmployeeID: show nothing
-    allowedEmployeeIds = [];
-    showManagerDropdown = false;
-  }
+  const showManagerDropdown = false; // (if you want to memoize this, do similarly)
 
   const roleName = user?.roles && user.roles.length > 0 ? user.roles[0].roleName.toLowerCase() : '';
   const allowedEmployeeOption = employeeOptions.find(opt => opt.value === String(employeeId));
@@ -190,19 +187,23 @@ const TimesheetTable = ({ managerFilter }) => {
     EmployeeID: [],
     Status: []
   });
-  const [dateFilterType, setDateFilterType] = useState('today');
+  // Set default dateFilterType to 'week' and weekOffset to -1 (previous week)
+  const [dateFilterType, setDateFilterType] = useState('week');
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedWeekDay, setSelectedWeekDay] = useState(null);
   const [selectedMonthWeek, setSelectedMonthWeek] = useState(null);
+  const [weekOffset, setWeekOffset] = useState(-1);
 
   const [addError, setAddError] = useState('');
   const [addSuccess, setAddSuccess] = useState('');
-  const [weekOffset, setWeekOffset] = useState(0);
   const [prevClicked, setPrevClicked] = useState(false);
   const [selectedRows, setSelectedRows] = useState([]);
   const [rowEdits, setRowEdits] = useState({});
   const [approveStatus, setApproveStatus] = useState('');
   const [approveError, setApproveError] = useState('');
+  // Fix ESLint: Track last fetched employee IDs to avoid redundant API calls
+  const [lastFetchedEmployeeIdsState, setLastFetchedEmployeeIdsState] = useState([]); // (optional: for debugging)
+  const lastFetchedEmployeeIds = useRef([]); // Use ref to avoid re-render loop
 
   // Manager dropdown filter logic
   const [localManager, setLocalManager] = useState('VandanaKumari');
@@ -213,9 +214,22 @@ const TimesheetTable = ({ managerFilter }) => {
     // eslint-disable-next-line
   }, [localManager, showManagerDropdown]);
 
-  const fetchEntries = useCallback(async () => {
+  // Fetch entries based on selected employees
+  const fetchEntries = useCallback(async (employeeIds = null) => {
     try {
-      const response = await getAllTimesheetEntries();
+      let response;
+      // If specific employees are selected, fetch only their data
+      if (employeeIds && employeeIds.length > 0) {
+        // If your API supports fetching multiple employees at once, pass array; otherwise, loop
+        // Here, assuming API can take a single employeeId or an array
+        response = await getAllTimesheetEntries(employeeIds);
+      } else if (allowedEmployeeIds && allowedEmployeeIds.length > 0) {
+        // Default: fetch for the first allowed employee (manager's first employee)
+        response = await getAllTimesheetEntries([allowedEmployeeIds[0]]);
+      } else {
+        // Fallback: fetch all (should not happen for regular users)
+        response = await getAllTimesheetEntries();
+      }
       setEntries(response.data);
       const uniqueOptions = {
         ProjectsName: [
@@ -232,33 +246,47 @@ const TimesheetTable = ({ managerFilter }) => {
     } catch (error) {
       console.error('Error fetching timesheet entries:', error);
     }
-  }, [projectOptions]);
+  }, [projectOptions, allowedEmployeeIds]);
   
+  // Fetch on mount or when allowedEmployeeIds changes
   useEffect(() => {
-    fetchEntries();
-    // eslint-disable-next-line
-  }, []);
-
-  useEffect(() => {
-    if (employeeId) {
+    if (allowedEmployeeIds && allowedEmployeeIds.length > 0) {
+      // On first mount, set EmployeeID filter to first allowed employee (not All)
+      setFilters(f => ({ ...f, EmployeeID: [String(allowedEmployeeIds[0])] }));
+      fetchEntries([allowedEmployeeIds[0]]); // Default: first employee
+    } else {
       fetchEntries();
     }
     // eslint-disable-next-line
-  }, [employeeId]);
+  }, [allowedEmployeeIds]);
 
+  // Fetch when Employee filter changes
+  useEffect(() => {
+    let idsToFetch = [];
+    if (filters.EmployeeID && filters.EmployeeID.length > 0) {
+      idsToFetch = filters.EmployeeID.map(Number);
+    } else if (allowedEmployeeIds && allowedEmployeeIds.length > 0) {
+      // If 'All' is selected, fetch for all allowed employees
+      idsToFetch = allowedEmployeeIds;
+    }
+    // Only fetch if the ids to fetch are different from last fetched
+    if (JSON.stringify(idsToFetch) !== JSON.stringify(lastFetchedEmployeeIds.current)) {
+      fetchEntries(idsToFetch);
+      lastFetchedEmployeeIds.current = idsToFetch;
+      setLastFetchedEmployeeIdsState(idsToFetch); // (optional: for debugging)
+    }
+    // eslint-disable-next-line
+  }, [filters.EmployeeID, allowedEmployeeIds]);
+
+  // When dateFilterType changes, reset weekOffset to -1 if switching to week
   useEffect(() => {
     if (dateFilterType === 'month') {
       setSelectedMonth(new Date().getMonth());
     }
     if (dateFilterType !== 'week') {
       setSelectedWeekDay(null);
-    }
-  }, [dateFilterType]);
-
-  useEffect(() => {
-    if (dateFilterType === 'week') {
-      setWeekOffset(0);
-      setPrevClicked(false);
+    } else {
+      setWeekOffset(-1); // Always show previous week when switching to week view
     }
   }, [dateFilterType]);
 
@@ -726,7 +754,7 @@ const TimesheetTable = ({ managerFilter }) => {
       </div>
       <div className="approve-btns-container">
         <button className="edit-btn approve-all-btn" onClick={handleBulkApprove}>
-          Submite Selected
+          Submit Selected
         </button>
         <button
           className="edit-btn approve-all-btn"
@@ -735,7 +763,7 @@ const TimesheetTable = ({ managerFilter }) => {
             handleBulkApprove();
           }}
         >
-          Submite All
+          Submit All
         </button>
         {approveError && <span className="approve-error">{approveError}</span>}
       </div>
@@ -840,7 +868,7 @@ const TimesheetTable = ({ managerFilter }) => {
       
       <div className="approve-btns-container">
         <button className="edit-btn approve-all-btn" onClick={handleBulkApprove}>
-          Submite Selected
+          Submit Selected
         </button>
         <button
           className="edit-btn approve-all-btn"
@@ -849,7 +877,7 @@ const TimesheetTable = ({ managerFilter }) => {
             handleBulkApprove();
           }}
         >
-          Submite All
+          Submit All
         </button>
         {approveError && <span className="approve-error">{approveError}</span>}
       </div>

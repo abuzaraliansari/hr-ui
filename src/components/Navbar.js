@@ -118,7 +118,12 @@ const Navbar = () => {
             </ul>
           </li>
 
-          {/* User Management Dropdown */}
+         
+
+          {/* Username above logout */}
+          <li style={{ display: 'flex', flexDirection: 'row', alignItems: 'center',justifyContent:'center', minWidth: 180, marginLeft: 12 }}>
+            <span>
+              {/* User Management Dropdown */}
           <li
             className="navbar-dropdown"
             onMouseEnter={() => setOpenDropdown('userManagement')}
@@ -149,11 +154,6 @@ const Navbar = () => {
               </li>
             </ul>
           </li>
-
-          {/* Username above logout */}
-          <li style={{ display: 'flex', flexDirection: 'column', alignItems: 'center',justifyContent:'center', minWidth: 180, marginLeft: 12 }}>
-            <span style={{ color: '#36aaff', fontWeight: 600, fontSize: '1.1rem', marginBottom: 2, letterSpacing: 0.5 }}>
-             
             </span>
             <button
               onClick={() => {
