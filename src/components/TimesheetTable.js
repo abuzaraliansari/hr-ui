@@ -100,17 +100,14 @@ const MultiSelectDropdown = ({ label, options, selected, onChange, allLabel = 'A
     return () => document.removeEventListener('mousedown', handleClick);
   }, [open]);
 
-  // Auto-select all matching options and clear previous selections when search changes
+  // Auto-select ONLY filtered options as you type (deselect others)
   useEffect(() => {
     if (search.length > 0) {
-      const filtered = options.filter(opt => {
-        const labelText = (opt.label || opt).toLowerCase();
-        return labelText.includes(search.toLowerCase());
-      });
-      const filteredValues = filtered.map(opt => String(opt.value || opt));
-      if (JSON.stringify(selected) !== JSON.stringify(filteredValues)) {
-        onChange(filteredValues);
-      }
+      const filteredValues = options.filter(opt => {
+        const labelStr = (opt.label || opt).toLowerCase();
+        return labelStr.includes(search.toLowerCase());
+      }).map(opt => String(opt.value || opt));
+      onChange(filteredValues);
     }
   }, [search]);
 
@@ -133,10 +130,29 @@ const MultiSelectDropdown = ({ label, options, selected, onChange, allLabel = 'A
     return label.includes(search.toLowerCase());
   });
 
+  // Move selected options to top (in selection order), rest in original order
+  const selectedSet = new Set(selected);
+  const selectedOptions = filteredOptions.filter(opt => selectedSet.has(String(opt.value || opt)));
+  const unselectedOptions = filteredOptions.filter(opt => !selectedSet.has(String(opt.value || opt)));
+  const displayOptions = [...selectedOptions, ...unselectedOptions];
+
+  // Compute label with selected values
+  let displayLabel = label;
+  if (selected.length === 1) {
+    // Find the label for the selected value
+    const selOpt = options.find(opt => String(opt.value || opt) === selected[0]);
+    displayLabel = selOpt ? selOpt.label || selOpt : selected[0];
+  } else if (selected.length > 1) {
+    const selOpt = options.find(opt => String(opt.value || opt) === selected[0]);
+    let firstLabel = selOpt ? (selOpt.label || selOpt) : selected[0];
+    if (firstLabel.length > 5) firstLabel = firstLabel.slice(0, 5);
+    displayLabel = `${firstLabel} +${selected.length - 1}`;
+  }
+
   return (
     <div className="msd-container" style={{ minWidth: 120, ...style }} ref={containerRef}>
       <div className="msd-label" onClick={() => setOpen(o => !o)}>
-        {label}
+        {displayLabel}
         <span className="msd-arrow">{open ? '\u25B2' : '\u25BC'}</span>
       </div>
       {open && (
@@ -152,7 +168,7 @@ const MultiSelectDropdown = ({ label, options, selected, onChange, allLabel = 'A
           <label className="msd-option">
             <input type="checkbox" checked={selected.length === 0} onChange={handleAllChange} /> {allLabel}
           </label>
-          {filteredOptions.map(opt => (
+          {displayOptions.map(opt => (
             <label className="msd-option" key={opt.value || opt}>
               <input
                 type="checkbox"
@@ -161,7 +177,7 @@ const MultiSelectDropdown = ({ label, options, selected, onChange, allLabel = 'A
               /> {opt.label || opt}
             </label>
           ))}
-          {filteredOptions.length === 0 && (
+          {displayOptions.length === 0 && (
             <div className="msd-no-options">No options found</div>
           )}
         </div>

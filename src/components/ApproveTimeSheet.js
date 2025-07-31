@@ -62,7 +62,7 @@ const getWeeksInMonth = (year, month) => {
   return weeks;
 };
 
-// Enhanced MultiSelectDropdown with search and auto-select
+// Enhanced MultiSelectDropdown with search, auto-select, selected at top, dynamic label, and 'No options found'
 const MultiSelectDropdown = ({ label, options, selected, onChange, allLabel = 'All', style = {} }) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -81,36 +81,49 @@ const MultiSelectDropdown = ({ label, options, selected, onChange, allLabel = 'A
   }, [open]);
 
   // Filter options by search
-  const filteredOptions = search
-    ? options.filter(opt => (opt.label || opt).toLowerCase().includes(search.toLowerCase()))
-    : options;
+  const filteredOptions = options.filter(opt =>
+    !search ? true : (opt.label || opt).toLowerCase().includes(search.toLowerCase())
+  );
 
-  // Auto-select all matching options on search
+  // Auto-select ONLY filtered options as you type (deselect others)
   useEffect(() => {
-    if (search && filteredOptions.length > 0) {
+    if (search) {
       onChange(filteredOptions.map(opt => String(opt.value || opt)));
-    } else if (search && filteredOptions.length === 0) {
-      onChange([]);
     }
+    // If search is cleared, do not auto-select all
     // eslint-disable-next-line
   }, [search]);
 
   const handleOptionChange = (value) => {
-    if (value === 'ALL') {
-      onChange([]);
+    if (selected.includes(value)) {
+      onChange(selected.filter(v => v !== value));
     } else {
-      if (selected.includes(value)) {
-        onChange(selected.filter(v => v !== value));
-      } else {
-        onChange([...selected, value]);
-      }
+      onChange([...selected, value]);
     }
   };
   const handleAllChange = () => onChange([]);
+
+  // Move selected options to top (in selection order), rest in original order
+  const selectedSet = new Set(selected);
+  const selectedOptions = filteredOptions.filter(opt => selectedSet.has(String(opt.value || opt)));
+  const unselectedOptions = filteredOptions.filter(opt => !selectedSet.has(String(opt.value || opt)));
+  const displayOptions = [...selectedOptions, ...unselectedOptions];
+
+  // Compute label with selected values
+  let displayLabel = label;
+  if (selected.length === 1) {
+    const sel = options.find(opt => String(opt.value || opt) === selected[0]);
+    displayLabel = sel ? sel.label || sel : label;
+  } else if (selected.length > 1) {
+    const sel = options.find(opt => String(opt.value || opt) === selected[0]);
+    const first = sel ? (sel.label || sel) : label;
+    displayLabel = `${first.toString().slice(0, 5)}...+${selected.length - 1}`;
+  }
+
   return (
     <div className="msd-container" style={{ minWidth: 120, ...style }} ref={containerRef}>
       <div className="msd-label" onClick={() => setOpen(o => !o)}>
-        {label}
+        {displayLabel}
         <span className="msd-arrow">{open ? '\u25B2' : '\u25BC'}</span>
       </div>
       {open && (
@@ -121,12 +134,12 @@ const MultiSelectDropdown = ({ label, options, selected, onChange, allLabel = 'A
             placeholder={`Search ${label}`}
             value={search}
             onChange={e => setSearch(e.target.value)}
-            style={{ width: '95%', margin: '0.3rem 0.2rem', padding: '0.2rem' }}
+            style={{ width: '95%', margin: '6px 0', padding: '4px' }}
           />
           <label className="msd-option">
             <input type="checkbox" checked={selected.length === 0} onChange={handleAllChange} /> {allLabel}
           </label>
-          {filteredOptions.map(opt => (
+          {displayOptions.map(opt => (
             <label className="msd-option" key={opt.value || opt}>
               <input
                 type="checkbox"
@@ -135,6 +148,9 @@ const MultiSelectDropdown = ({ label, options, selected, onChange, allLabel = 'A
               /> {opt.label || opt}
             </label>
           ))}
+          {displayOptions.length === 0 && (
+            <div className="msd-no-options">No options found</div>
+          )}
         </div>
       )}
     </div>

@@ -13,6 +13,7 @@ import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import { useAuth } from './AuthContext';
 import ManagerTimesheetPage from './components/ManagerTimesheetPage';
+import Auth from './components/Auth';
 
 function PrivateRoute({ children }) {
   const { user } = useAuth();
@@ -60,6 +61,8 @@ function App() {
           <Route path="/AddUser" element={<PrivateRoute><AddUser /></PrivateRoute>} />
           <Route path="/password" element={<PrivateRoute><ChangePassword /></PrivateRoute>} />
           <Route path="/managerTimesheet" element={<ManagerTimesheetPage />} />
+          <Route path="/Auth" element={<Auth />} />
+          
           <Route path="*" element={<h2>404 - Page Not Found</h2>} />
         </Routes>
       </div>
