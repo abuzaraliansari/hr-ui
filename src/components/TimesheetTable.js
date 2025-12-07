@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import {
   getAllTimesheetEntries,
@@ -24,19 +24,35 @@ const getCurrentWeekDates = (offset = 0) => {
   });
 };
 
-// Helper to get all weeks in a month (returns array of [startDate, endDate] for each week)
+// ✅ FIXED: Helper to get all weeks in a month (returns array of [startDate, endDate] for each week)
 const getWeeksInMonth = (year, month) => {
   const weeks = [];
-  let date = new Date(year, month, 1);
-  date.setDate(date.getDate() - ((date.getDay() + 6) % 7));
-  while (date.getMonth() <= month) {
+  const firstDayOfMonth = new Date(year, month, 1);
+  const lastDayOfMonth = new Date(year, month + 1, 0);
+  
+  // Find the Monday of the week containing the first day of the month
+  let date = new Date(firstDayOfMonth);
+  const dayOfWeek = date.getDay();
+  const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  date.setDate(date.getDate() - daysToMonday);
+  
+  // Loop through weeks until we pass the last day of the month
+  let iterationCount = 0; // Safety counter
+  const MAX_WEEKS = 6; // No month has more than 6 weeks
+  
+  while (iterationCount < MAX_WEEKS) {
     const weekStart = new Date(date);
     const weekEnd = new Date(date);
     weekEnd.setDate(weekEnd.getDate() + 6);
+    
+    // Stop if this week starts after the last day of the month
+    if (weekStart > lastDayOfMonth) break;
+    
     weeks.push([new Date(weekStart), new Date(weekEnd)]);
     date.setDate(date.getDate() + 7);
-    if (weekStart.getMonth() > month || (weekStart.getMonth() === month && weekStart.getDate() > new Date(year, month + 1, 0).getDate())) break;
+    iterationCount++;
   }
+  
   return weeks;
 };
 
@@ -83,7 +99,7 @@ const categoryOptions = [
 
 const statusOptions = ['Draft', 'Pending'];
 
-// Reusable MultiSelectDropdown component with search and auto-select on search
+// ✅ FIXED: Reusable MultiSelectDropdown component (auto-select removed)
 const MultiSelectDropdown = ({ label, options, selected, onChange, allLabel = 'All', style = {} }) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -99,17 +115,6 @@ const MultiSelectDropdown = ({ label, options, selected, onChange, allLabel = 'A
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [open]);
-
-  // Auto-select ONLY filtered options as you type (deselect others)
-  useEffect(() => {
-    if (search.length > 0) {
-      const filteredValues = options.filter(opt => {
-        const labelStr = (opt.label || opt).toLowerCase();
-        return labelStr.includes(search.toLowerCase());
-      }).map(opt => String(opt.value || opt));
-      onChange(filteredValues);
-    }
-  }, [search]);
 
   const handleOptionChange = (value) => {
     if (value === 'ALL') {
@@ -139,7 +144,6 @@ const MultiSelectDropdown = ({ label, options, selected, onChange, allLabel = 'A
   // Compute label with selected values
   let displayLabel = label;
   if (selected.length === 1) {
-    // Find the label for the selected value
     const selOpt = options.find(opt => String(opt.value || opt) === selected[0]);
     displayLabel = selOpt ? selOpt.label || selOpt : selected[0];
   } else if (selected.length > 1) {
@@ -235,33 +239,35 @@ const TimesheetTable = () => {
   const [uploadSuccess, setUploadSuccess] = useState('');
   const fileInputRef = React.useRef(null);
 
+  // Memoize projectOptions to prevent recreation
+  const projectOptionsMemo = useMemo(() => projectOptions, [JSON.stringify(projectOptions)]);
+
   const fetchEntries = useCallback(async () => {
     try {
       const payloadEmployeeId = Number(employeeId);
       const response = await getAllTimesheetEntries(payloadEmployeeId);
       setEntries(response.data);
-
+      
       const uniqueOptions = {
-        ProjectsName: [
-          ...new Set(
-            response.data
-              .map((entry) => projectOptions.find(opt => opt.value === String(entry.ProjectID))?.label)
-              .filter(Boolean)
-          )
-        ],
-        Status: [...new Set(response.data.map((entry) => entry.Status))]
+        ProjectsName: [...new Set(
+          response.data
+            .map(entry => projectOptionsMemo.find(opt => opt.value === String(entry.ProjectID))?.label)
+            .filter(Boolean)
+        )],
+        Status: [...new Set(response.data.map(entry => entry.Status))]
       };
       setFilterOptions(uniqueOptions);
     } catch (error) {
-      console.error('Error fetching timesheet entries:', error);
+      console.error('Error fetching timesheet entries', error);
     }
-  }, [employeeId, projectOptions]);
+  }, [employeeId, projectOptionsMemo]);
 
+  // Call only once on mount or when employeeId changes
   useEffect(() => {
     if (employeeId) {
       fetchEntries();
     }
-  }, [employeeId, fetchEntries]);
+  }, [employeeId]);
 
   useEffect(() => {
     if (dateFilterType === 'month') {
@@ -542,7 +548,6 @@ const TimesheetTable = () => {
   const handleDownloadExcel = async () => {
     if (filteredEntries.length === 0) return;
 
-    // Group entries by EmployeeID
     const entriesByEmployee = {};
     filteredEntries.forEach(entry => {
       const empId = String(entry.EmployeeID);
@@ -552,14 +557,11 @@ const TimesheetTable = () => {
 
     const workbook = new ExcelJS.Workbook();
 
-    // For each employee, create a worksheet
     Object.entries(entriesByEmployee).forEach(([empId, entries]) => {
       const empLabel = employeeOptions.find(opt => String(opt.value) === empId)?.label || empId;
-      // Excel worksheet names max 31 chars, remove special chars
       const safeLabel = empLabel.replace(/[^a-zA-Z0-9 _-]/g, '').substring(0, 31) || `Employee_${empId}`;
       const worksheet = workbook.addWorksheet(safeLabel);
 
-      // Prepare data for Excel: show labels for EmployeeName and Project, add S.No
       const data = entries.map((entry, idx) => ({
         SNo: idx + 1,
         Date: formatDateTime(entry.Date),
@@ -573,9 +575,8 @@ const TimesheetTable = () => {
         Comment: entry.Comment,
         ManagerComment: entry.ManagerComment
       }));
-      // Calculate total hours
+      
       const totalHours = data.reduce((sum, row) => sum + (parseFloat(row.Hours) || 0), 0);
-      // Add a total row at the end: label in Task, value in Hours
       data.push({
         SNo: '',
         Date: '',
@@ -589,6 +590,7 @@ const TimesheetTable = () => {
         Comment: '',
         ManagerComment: ''
       });
+      
       worksheet.columns = [
         { header: 'S.No', key: 'SNo', width: 8 },
         { header: 'Date', key: 'Date', width: 12 },
@@ -602,8 +604,9 @@ const TimesheetTable = () => {
         { header: 'Comment', key: 'Comment', width: 20 },
         { header: 'ManagerComment', key: 'ManagerComment', width: 20 }
       ];
+      
       data.forEach(row => worksheet.addRow(row));
-      // Header styling
+      
       worksheet.getRow(1).eachCell(cell => {
         cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         cell.fill = {
@@ -619,9 +622,9 @@ const TimesheetTable = () => {
           right: { style: 'thin' }
         };
       });
-      // Banded rows styling
+      
       worksheet.eachRow((row, rowNumber) => {
-        if (rowNumber === 1) return; // skip header
+        if (rowNumber === 1) return;
         row.eachCell(cell => {
           cell.alignment = { vertical: 'middle', horizontal: 'left' };
           cell.border = {
@@ -639,12 +642,12 @@ const TimesheetTable = () => {
           }
         });
       });
-      // Autofilter
+      
       worksheet.autoFilter = {
         from: { row: 1, column: 1 },
         to: { row: 1, column: worksheet.columns.length }
       };
-      // Bold and colored total row
+      
       const totalRow = worksheet.getRow(data.length + 1);
       totalRow.eachCell(cell => {
         cell.font = { bold: true, color: { argb: 'FF0070C0' } };
@@ -656,7 +659,6 @@ const TimesheetTable = () => {
       });
     });
 
-    // Download file
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = window.URL.createObjectURL(blob);
@@ -669,7 +671,6 @@ const TimesheetTable = () => {
     window.URL.revokeObjectURL(url);
   };
 
-  // Excel upload handler
   const handleUploadClick = () => {
     setUploadError("");
     setUploadSuccess("");
@@ -677,11 +678,8 @@ const TimesheetTable = () => {
     fileInputRef.current.click();
   };
 
-  // Helper to convert Excel serial date to yyyy-mm-dd
   const excelDateToISO = (excelDate) => {
-    // Excel date is days since 1899-12-31
     const jsDate = new Date(Math.round((excelDate - 25569) * 86400 * 1000));
-    // Adjust for Excel's leap year bug
     if (excelDate < 60) jsDate.setDate(jsDate.getDate() - 1);
     return jsDate.toISOString().slice(0, 10);
   };
@@ -704,7 +702,7 @@ const TimesheetTable = () => {
         setUploadError("Invalid Excel format. Please use the provided template.");
         return;
       }
-      // Parse rows
+      
       const entries = rows.slice(1).map((row, idx) => ({
         rowNum: idx + 2,
         Date: row[1],
@@ -718,7 +716,6 @@ const TimesheetTable = () => {
         ManagerComment: row[10]
       })).filter(row => row.Date && row.Cateogary && row.Project && row.Task && row.TotalHours);
 
-      // Validate total hours for all entries
       const totalHours = entries.reduce((sum, e) => sum + (parseFloat(e.TotalHours) || 0), 0);
       if (totalHours > 45) {
         setUploadError("Total Hours cannot be more than 45");
@@ -728,18 +725,17 @@ const TimesheetTable = () => {
         setUploadError("Total Hours cannot be less than 35");
         return;
       }
-      // Get current week dates (Mon-Sun) based on weekOffset
+      
       const weekDates = getCurrentWeekDates(weekOffset).map(d => d.toISOString().slice(0, 10));
       let successRows = [];
       let errorRows = [];
+      
       for (const entry of entries) {
         let entryDateStr = "";
         try {
           if (typeof entry.Date === "number") {
-            // Excel serial date
             entryDateStr = excelDateToISO(entry.Date);
           } else if (typeof entry.Date === "string" && entry.Date.includes("/")) {
-            // dd/mm/yy or dd/mm/yyyy
             const parts = entry.Date.split("/");
             if (parts.length === 3) {
               let [d, m, y] = parts;
@@ -749,7 +745,6 @@ const TimesheetTable = () => {
               throw new Error("Invalid date format");
             }
           } else if (typeof entry.Date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(entry.Date)) {
-            // yyyy-mm-dd
             entryDateStr = entry.Date;
           } else {
             throw new Error("Invalid date format");
@@ -758,10 +753,12 @@ const TimesheetTable = () => {
           errorRows.push({ row: entry.rowNum, reason: `Invalid date format: ${entry.Date}` });
           continue;
         }
+        
         if (!weekDates.includes(entryDateStr)) {
           errorRows.push({ row: entry.rowNum, reason: `Date ${entry.Date} is not in the current week (Mon-Sun).` });
           continue;
         }
+        
         const projectOpt = projectOptions.find(opt => opt.label.toLowerCase() === String(entry.Project).toLowerCase());
         const projectID = projectOpt ? projectOpt.value : "";
         let maxHours = 3;
@@ -770,10 +767,12 @@ const TimesheetTable = () => {
         } else if (projectID === "4") {
           maxHours = 8;
         }
+        
         if (Number(entry.TotalHours) > maxHours) {
           errorRows.push({ row: entry.rowNum, reason: `Row with Task '${entry.Task}' and Project '${entry.Project}' has more than allowed hours (${maxHours})` });
           continue;
         }
+        
         const payload = {
           EmployeeID: employeeId,
           ProjectID: projectID,
@@ -787,6 +786,7 @@ const TimesheetTable = () => {
           Status: "Draft",
           CreatedBy: "system"
         };
+        
         try {
           await createTimesheetEntry(payload);
           successRows.push(entry.rowNum);
@@ -794,9 +794,10 @@ const TimesheetTable = () => {
           errorRows.push({ row: entry.rowNum, reason: err.response?.data?.error || "Failed to save entry." });
         }
       }
+      
       let msg = "";
       if (successRows.length > 0) {
-        msg += `Successfully uploaded please review and submit.`;
+        msg += `Successfully uploaded please review and submit.`;
       }
       if (errorRows.length > 0) {
         msg += " Errors:\n" + errorRows.map(er => `Row ${er.row}: ${er.reason}`).join("\n");
@@ -997,21 +998,21 @@ const TimesheetTable = () => {
         {dateFilterType === 'month' && null}
       </div>
       <div className="timesheet-table-scroll">
-            <tfoot>
-        <tr>
-          <td
-            colSpan="12"
-            className={`tfoot-total tfoot-total-${tfootColor}`}
-          >
-            {(() => {
-              if (dateFilterType === 'today') return `Total hours of today: ${totalHours}`;
-              if (dateFilterType === 'week') return `Total hours of this week: ${totalHours}`;
-              if (dateFilterType === 'month') return `Total hours of this month: ${totalHours}`;
-              return `Total hours: ${totalHours}`;
-            })()}
-          </td>
-        </tr>
-      </tfoot>
+          <tfoot>
+            <tr>
+              <td
+                colSpan="11"
+                className={`tfoot-total tfoot-total-${tfootColor}`}
+              >
+                {(() => {
+                  if (dateFilterType === 'today') return `Total hours of today: ${totalHours}`;
+                  if (dateFilterType === 'week') return `Total hours of this week: ${totalHours}`;
+                  if (dateFilterType === 'month') return `Total hours of this month: ${totalHours}`;
+                  return `Total hours: ${totalHours}`;
+                })()}
+              </td>
+            </tr>
+          </tfoot>
         <table className="timesheet-table">
           <thead>
             <tr>
@@ -1285,6 +1286,7 @@ const TimesheetTable = () => {
               );
             })}
           </tbody>
+        
         </table>
       </div>
      <div className="submit-btn-container">

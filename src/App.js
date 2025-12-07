@@ -14,6 +14,7 @@ import Footer from './components/Footer';
 import { useAuth } from './AuthContext';
 import ManagerTimesheetPage from './components/ManagerTimesheetPage';
 import Auth from './components/Auth';
+import ScrapperPage from './components/ScrapperPage';
 
 function PrivateRoute({ children }) {
   const { user } = useAuth();
@@ -64,7 +65,9 @@ function App() {
           <Route path="/Auth" element={<Auth />} />
           
           <Route path="*" element={<h2>404 - Page Not Found</h2>} />
+          <Route path="/scrapper" element={<ScrapperPage />} />
         </Routes>
+        
       </div>
       <div className='footer'>
       {<Footer />}

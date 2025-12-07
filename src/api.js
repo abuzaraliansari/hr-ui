@@ -58,6 +58,18 @@ export const bulkUpdateTimesheetStatus = (entryIds, status, modifiedBy = 'admin'
     return response.json(); // Should return something like [{ ProjectID: 101, ProjectName: 'Alpha' }, ...]
   };
 
+ export const getScrapperData = async (filters) => {
+  const response = await fetch('https://babralauatapi-d9abe9h8frescchd.centralindia-01.azurewebsites.net/api/scrapper/data', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(filters || {})
+  });
+  if (!response.ok) {
+    throw new Error('Failed to fetch scrapper data');
+  }
+  return await response.json();
+};
+
 // export const loginEmployee = async ({ employeeId, password }) => {
 //     // For demo, just resolve if employeeId and password are not empty
 //     if (employeeId && password) {
@@ -69,7 +81,7 @@ export const bulkUpdateTimesheetStatus = (entryIds, status, modifiedBy = 'admin'
 // Updated loginEmployee to use username and password, and call backend API
 export const loginEmployee = async ({ username, password }) => {
   try {
-    const response = await fetch(`${API_URL}/login`, {
+    const response = await fetch(`https://babralauatapi-d9abe9h8frescchd.centralindia-01.azurewebsites.net/api/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password })
@@ -123,6 +135,24 @@ export const changePassword = async ({ email, username, password, newPassword, c
     return { success: false, message: 'Network error' };
   }
 };
+
+export const forgotPassword = async ({ email }) => {
+  try {
+    const response = await fetch(`${API_URL}/forgot-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      return { success: false, message: data.message || 'Failed to send reset email' };
+    }
+    return { success: true, message: data.message };
+  } catch (err) {
+    return { success: false, message: 'Network error' };
+  }
+};
+
 
 // Add this to your API utility (hr-ui/src/api.js)
 export async function addUser(data) {

@@ -47,20 +47,35 @@ const getCurrentWeekDates = (offset = 0) => {
 };
 
 // Helper to get all weeks in a month (returns array of [startDate, endDate] for each week)
+// ✅ FIXED: Helper to get all weeks in a month
 const getWeeksInMonth = (year, month) => {
   const weeks = [];
-  let date = new Date(year, month, 1);
-  date.setDate(date.getDate() - ((date.getDay() + 6) % 7));
-  while (date.getMonth() <= month) {
+  const firstDayOfMonth = new Date(year, month, 1);
+  const lastDayOfMonth = new Date(year, month + 1, 0);
+  
+  let date = new Date(firstDayOfMonth);
+  const dayOfWeek = date.getDay();
+  const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  date.setDate(date.getDate() - daysToMonday);
+  
+  let iterationCount = 0;
+  const MAX_WEEKS = 6;
+  
+  while (iterationCount < MAX_WEEKS) {
     const weekStart = new Date(date);
     const weekEnd = new Date(date);
     weekEnd.setDate(weekEnd.getDate() + 6);
+    
+    if (weekStart > lastDayOfMonth) break;
+    
     weeks.push([new Date(weekStart), new Date(weekEnd)]);
     date.setDate(date.getDate() + 7);
-    if (weekStart.getMonth() > month || (weekStart.getMonth() === month && weekStart.getDate() > new Date(year, month + 1, 0).getDate())) break;
+    iterationCount++;
   }
+  
   return weeks;
 };
+
 
 // Enhanced MultiSelectDropdown with search and auto-select
 const MultiSelectDropdown = ({ label, options, selected, onChange, allLabel = 'All', style = {} }) => {
