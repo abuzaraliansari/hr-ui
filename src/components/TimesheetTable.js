@@ -279,10 +279,10 @@ const TimesheetTable = () => {
   }, [dateFilterType]);
 
   useEffect(() => {
-    axios.get('https://babralauatapi-d9abe9h8frescchd.centralindia-01.azurewebsites.net/api/employeeOptions')
+    axios.get('https://timesheetapi-exfxf7bnb7bja5g7.centralindia-01.azurewebsites.net/api/employeeOptions')
       .then(res => setEmployeeOptions(res.data))
       .catch(() => setEmployeeOptions([]));
-    axios.get('https://babralauatapi-d9abe9h8frescchd.centralindia-01.azurewebsites.net/api/projectOptions')
+    axios.get('https://timesheetapi-exfxf7bnb7bja5g7.centralindia-01.azurewebsites.net/api/projectOptions')
       .then(res => setProjectOptions(res.data))
       .catch(() => setProjectOptions([]));
   }, []);

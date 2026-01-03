@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = 'https://babralauatapi-d9abe9h8frescchd.centralindia-01.azurewebsites.net/api';
+const API_URL = 'https://timesheetapi-exfxf7bnb7bja5g7.centralindia-01.azurewebsites.net/api';
 
 export const getTimesheetEntries = (employeeId) =>
   axios.post(`${API_URL}/assigned`, { EmployeeID: employeeId });
@@ -45,7 +45,7 @@ export const bulkUpdateTimesheetStatus = (entryIds, status, modifiedBy = 'admin'
 
 
   export const fetchProjectNames = async (projectIds) => {
-    const response = await fetch('https://babralauatapi-d9abe9h8frescchd.centralindia-01.azurewebsites.net/api/projects', {
+    const response = await fetch('https://timesheetapi-exfxf7bnb7bja5g7.centralindia-01.azurewebsites.net/api/projects', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ projectIds }),
@@ -59,7 +59,7 @@ export const bulkUpdateTimesheetStatus = (entryIds, status, modifiedBy = 'admin'
   };
 
  export const getScrapperData = async (filters) => {
-  const response = await fetch('https://babralauatapi-d9abe9h8frescchd.centralindia-01.azurewebsites.net/api/scrapper/data', {
+  const response = await fetch('https://timesheetapi-exfxf7bnb7bja5g7.centralindia-01.azurewebsites.net/api/scrapper/data', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(filters || {})
@@ -81,7 +81,7 @@ export const bulkUpdateTimesheetStatus = (entryIds, status, modifiedBy = 'admin'
 // Updated loginEmployee to use username and password, and call backend API
 export const loginEmployee = async ({ username, password }) => {
   try {
-    const response = await fetch(`https://babralauatapi-d9abe9h8frescchd.centralindia-01.azurewebsites.net/api/login`, {
+    const response = await fetch(`https://timesheetapi-exfxf7bnb7bja5g7.centralindia-01.azurewebsites.net/api/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password })
@@ -157,7 +157,7 @@ export const forgotPassword = async ({ email }) => {
 // Add this to your API utility (hr-ui/src/api.js)
 export async function addUser(data) {
   try {
-    const res = await fetch('https://babralauatapi-d9abe9h8frescchd.centralindia-01.azurewebsites.net/api/addUser', {
+    const res = await fetch('https://timesheetapi-exfxf7bnb7bja5g7.centralindia-01.azurewebsites.net/api/addUser', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)

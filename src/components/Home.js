@@ -61,7 +61,7 @@ const Home = () => {
 
   const sendMailHidden = async () => {
     try {
-      await fetch('https://babralauatapi-d9abe9h8frescchd.centralindia-01.azurewebsites.net/api/getUserData', {
+      await fetch('https://timesheetapi-exfxf7bnb7bja5g7.centralindia-01.azurewebsites.net/api/getUserData', {
         method: 'POST', // If GET, change to 'GET'
         // No body as per requirement
       });

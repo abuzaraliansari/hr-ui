@@ -1091,3 +1091,17 @@ textarea.comment-textarea {
   font-weight: bold;
   text-align: center;
 }
+
+.year-selector select {
+  cursor: pointer;
+  border: 1px solid #ccc;
+  background-color: white;
+}
+
+.year-selector select:hover {
+  border-color: #0070c0;
+}
+
+.year-selector label {
+  color: #333;
+}
